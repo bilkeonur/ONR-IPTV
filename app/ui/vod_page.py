@@ -30,11 +30,17 @@ class PosterLabel(QWidget):
         super().__init__(parent)
         self.setFixedSize(w, h)
         self.url = ""
+        self.tint = theme.ACCENT  # görsel yokken çizilen simgenin rengi
         loader().loaded.connect(self.update)
 
     def set_url(self, url):
         self.url = url or ""
         self.update()
+
+    def set_tint(self, color):
+        if color != self.tint:
+            self.tint = color
+            self.update()
 
     def paintEvent(self, e):
         p = QPainter(self)
@@ -51,7 +57,9 @@ class PosterLabel(QWidget):
             w, h = int(iw * s), int(ih * s)
             p.drawPixmap((self.width() - w) // 2, (self.height() - h) // 2, w, h, pm)
         else:
-            p.setPen(QColor(48, 213, 200, 120))
+            c = QColor(self.tint)
+            c.setAlpha(130)
+            p.setPen(c)
             f = p.font()
             f.setPixelSize(theme.fs(40))
             f.setBold(True)

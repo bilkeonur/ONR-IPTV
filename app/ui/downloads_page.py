@@ -1,4 +1,5 @@
 """İndirilenler: devam eden/tamamlanan indirmeler ve canlı yayın kayıtları."""
+import html
 import os
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ from ..qt import (QFrame, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushB
                   Qt, QTimer, QToolButton, QVBoxLayout, QWidget, Signal)
 from . import theme
 from .icons import icon
+from .player import fmt_time
 from .vod_page import PosterLabel
 from .widgets import StatusView, enable_kinetic
 
@@ -44,9 +46,8 @@ class TaskRow(QFrame):
         trow.setSpacing(8)
         self.title = QLabel(task["title"])
         trow.addWidget(self.title)
-        self.watched = QLabel("✓ " + _("İzlendi"))
-        self.watched.setObjectName("Badge")
-        trow.addWidget(self.watched)
+        self.badge = QLabel()
+        trow.addWidget(self.badge)
         trow.addStretch(1)
         col.addLayout(trow)
         self.bar = QProgressBar()
@@ -55,9 +56,10 @@ class TaskRow(QFrame):
         col.addWidget(self.bar)
         self.info = QLabel()
         self.info.setObjectName("Muted")
+        self.info.setTextFormat(Qt.TextFormat.RichText)
         col.addWidget(self.info)
         lay.addLayout(col, 1)
-        self.btn_play = self._btn("play", _("Oynat"), lambda: self.play.emit(self.tid), theme.ACCENT)
+        self.btn_play = self._btn("play", _("Oynat"), lambda: self.play.emit(self.tid))
         self.btn_pause = self._btn("pause", _("Duraklat"), lambda: self.dm.pause(self.tid))
         self.btn_resume = self._btn("download", _("Devam et"), lambda: self.dm.resume(self.tid))
         self.btn_folder = self._btn("folder", _("Klasörü aç"), self._open_folder)
@@ -82,11 +84,31 @@ class TaskRow(QFrame):
         ud = self.userdata
         watched = bool(st == DONE and ud and ud.is_watched(key))
         prog = ud.get_progress(key) if st == DONE and ud and key else None
-        self.watched.setVisible(watched)
-        # İzlenip bitirilenler soluk gösterilir
+        watching = bool(prog and prog.get("dur") and not watched)
+        # Durum rengi: indiriliyor mavi, indirildi turkuaz, izleniyor mor, izlendi yeşil
+        if st == DONE:
+            if watched:
+                color, label = theme.WATCHED, "✓ " + _("İzlendi")
+            elif watching:
+                color = theme.WATCHING
+                label = "▶ " + _("İzleniyor %{n}", n=int(prog["pos"] / prog["dur"] * 100))
+            else:
+                color, label = theme.ACCENT, "✓ " + _("İndirildi")
+        elif st == FAILED:
+            color, label = theme.DANGER, _("Hata")
+        elif st == PAUSED:
+            color, label = theme.WARN, _("Duraklatıldı")
+        else:
+            color, label = theme.INFO, _(STATUS_TEXT.get(st, st))
+        self.badge.setText(label)
+        self.poster.set_tint(color)
+        self.badge.setStyleSheet(theme.scaled(f"background:{theme.rgba(color, 0.16)}; color:{color}; border-radius:8px;"
+                                              "padding:2px 8px; font-size:12px; font-weight:700;"))
         self.title.setStyleSheet(theme.scaled("font-weight:700;font-size:15px;"
                                               + (f"color:{theme.MUTED};" if watched else "")))
-        self.setStyleSheet(f"#Panel{{background:{theme.BG}; border:1px solid {theme.SURFACE2};}}" if watched else "")
+        self.setStyleSheet(f"#Panel{{background:{theme.BG if watched else theme.SURFACE};"
+                           f"border-left:4px solid {color}; border-radius:12px;}}"
+                           f"QProgressBar::chunk{{background:{color}; border-radius:3px;}}")
         if total:
             self.bar.setRange(0, 1000)
             self.bar.setValue(int(done / total * 1000))
@@ -103,11 +125,12 @@ class TaskRow(QFrame):
                     eta = int((total - done) / max(spd, 1))
                     txt += "  ·  " + _("{m} dk {s} sn kaldı", m=eta // 60, s=eta % 60)
         elif st == DONE:
-            txt += f"  ·  {human(total or done)}"
-            if prog and prog.get("dur"):
+            txt = human(total or done)
+            if watching:
+                # Çubuk izlenen kısmı gösterir
                 self.bar.setRange(0, prog["dur"])
                 self.bar.setValue(prog["pos"])
-                txt += "  ·  " + _("%{n} izlendi", n=int(prog["pos"] / prog["dur"] * 100))
+                txt += "  ·  " + _("{pos} / {dur} izlendi", pos=fmt_time(prog["pos"]), dur=fmt_time(prog["dur"]))
             if t.get("meta", {}).get("record"):
                 txt = _("Kayıt") + "  ·  " + txt
         elif st == FAILED:
@@ -115,7 +138,7 @@ class TaskRow(QFrame):
         elif st == PAUSED and total:
             txt += "  ·  " + _("%{n}", n=int(done / total * 100))
         self.bar.setVisible(not watched)
-        self.info.setText(txt)
+        self.info.setText(html.escape(txt))
         self.info.setStyleSheet(f"color:{theme.DANGER};" if st == FAILED else "")
         self.btn_play.setVisible(st == DONE)
         self.btn_pause.setVisible(st in (RUNNING, QUEUED, RESOLVING))
@@ -165,6 +188,13 @@ class DownloadsPage(QWidget):
         self.count = QLabel()
         self.count.setObjectName("Badge")
         head.addWidget(self.count)
+        head.addSpacing(12)
+        legend = QLabel("   ".join(f"<span style='color:{c}'>●</span> {html.escape(t)}" for c, t in (
+            (theme.INFO, _("İndiriliyor")), (theme.ACCENT, _("İndirildi")),
+            (theme.WATCHING, _("İzleniyor")), (theme.WATCHED, _("İzlendi")))))
+        legend.setObjectName("Muted")
+        legend.setTextFormat(Qt.TextFormat.RichText)
+        head.addWidget(legend)
         head.addStretch(1)
         self.disk = QLabel()
         self.disk.setObjectName("Muted")

@@ -18,6 +18,15 @@ ACCENT_LO = "#1a9d93"
 ACCENT_BG = "rgba(48, 213, 200, 0.14)"
 DANGER = "#ff5c6c"
 WARN = "#ffb547"
+INFO = "#4ea1ff"       # indiriliyor
+WATCHING = "#b48cff"   # izlemeye başlandı
+WATCHED = "#5fd38a"    # izlendi
+
+
+def rgba(hex_color, alpha):
+    """'#rrggbb' -> QSS rgba() metni."""
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)}, {alpha})"
 
 FONT = "Segoe UI" if IS_WINDOWS else "Noto Sans"
 
