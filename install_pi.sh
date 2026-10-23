@@ -19,7 +19,7 @@ sudo apt-get install -y python3-pyqt6.qtopengl || true
 echo ">> Sanal ortam hazırlanıyor..."
 python3 -m venv --system-site-packages "$VENV"
 "$VENV/bin/pip" install --upgrade pip >/dev/null
-"$VENV/bin/pip" install --upgrade "python-mpv>=1.0.4" "requests>=2.28"
+"$VENV/bin/pip" install --upgrade "python-mpv>=1.0.4" "requests>=2.28" "pychromecast>=14"
 
 if "$VENV/bin/python" -c "import PyQt6.QtOpenGLWidgets, PyQt6.QtSvg" 2>/dev/null; then
     echo ">> Qt: sistem PyQt6 kullanılacak"

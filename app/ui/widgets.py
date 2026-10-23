@@ -1,8 +1,9 @@
 """Ortak arayüz bileşenleri."""
 import time
 
+from ..i18n import N_, _
 from ..images import loader
-from ..qt import (QAbstractItemView, QAbstractListModel, QApplication, QBrush, QButtonGroup, QColor, QDialog,
+from ..qt import (QAbstractItemView, QAbstractListModel, QApplication, QBrush, QButtonGroup, QColor, QComboBox, QDialog,
                   QEvent, QFont, QFontMetrics, QFrame, QGridLayout, QHBoxLayout, QLabel, QLinearGradient,
                   QLineEdit, QListView, QModelIndex, QPainter, QPainterPath, QPen, QPushButton, QRect, QRectF,
                   QScrollArea, QScroller, QScrollerProperties, QSize, QStyle, QStyledItemDelegate, Qt, QTimer,
@@ -85,26 +86,26 @@ def _initials(name):
 
 
 class ChannelDelegate(QStyledItemDelegate):
-    ROW_H = 60
-
     def __init__(self, ctx, parent=None, compact=False):
         super().__init__(parent)
         self.ctx = ctx  # .userdata, .epg, .playing_id, .show_epg
         self.compact = compact
+        self.k = max(1.0, theme.SCALE)  # büyük yazıda satırlar da büyür
+        self.row_h = round(62 * self.k)
         self.f_name = QFont(theme.FONT)
-        self.f_name.setPixelSize(14)
+        self.f_name.setPixelSize(theme.fs(15))
         self.f_name.setWeight(QFont.Weight.DemiBold)
         self.f_sub = QFont(theme.FONT)
-        self.f_sub.setPixelSize(11)
+        self.f_sub.setPixelSize(theme.fs(12))
         self.f_num = QFont(theme.FONT)
-        self.f_num.setPixelSize(12)
+        self.f_num.setPixelSize(theme.fs(13))
         self.f_num.setWeight(QFont.Weight.Bold)
         self.f_ini = QFont(theme.FONT)
-        self.f_ini.setPixelSize(13)
+        self.f_ini.setPixelSize(theme.fs(13))
         self.f_ini.setWeight(QFont.Weight.Bold)
 
     def sizeHint(self, option, index):
-        return QSize(200, self.ROW_H)
+        return QSize(200, self.row_h)
 
     def paint(self, p, option, index):
         it = index.data(ItemRole)
@@ -147,7 +148,8 @@ class ChannelDelegate(QStyledItemDelegate):
         x = lr.right() + 12
 
         fav = self.ctx.userdata.is_favorite("live", it.id) if self.ctx.userdata else False
-        right = r.right() - (26 if fav else 8)
+        locked = bool(self.ctx.library and self.ctx.library.item_locked("live", it))
+        right = r.right() - 8 - (18 if fav else 0) - (18 if locked else 0)
         tw = right - x
         cur = None
         if self.ctx.show_epg and self.ctx.epg is not None:
@@ -157,11 +159,12 @@ class ChannelDelegate(QStyledItemDelegate):
         fm = QFontMetrics(self.f_name)
         name = fm.elidedText(it.name, Qt.TextElideMode.ElideRight, tw)
         if cur:
-            p.drawText(QRect(x, r.top() + 8, tw, 20), Qt.AlignmentFlag.AlignVCenter, name)
+            k = self.k
+            p.drawText(QRect(x, r.top() + round(7 * k), tw, round(21 * k)), Qt.AlignmentFlag.AlignVCenter, name)
             p.setFont(self.f_sub)
             p.setPen(QColor(theme.MUTED))
             fs = QFontMetrics(self.f_sub)
-            p.drawText(QRect(x, r.top() + 28, tw, 16), Qt.AlignmentFlag.AlignVCenter,
+            p.drawText(QRect(x, r.top() + round(28 * k), tw, round(17 * k)), Qt.AlignmentFlag.AlignVCenter,
                        fs.elidedText(cur["title"], Qt.TextElideMode.ElideRight, tw))
             now = time.time()
             frac = max(0.0, min(1.0, (now - cur["start"]) / max(1, cur["end"] - cur["start"])))
@@ -170,8 +173,12 @@ class ChannelDelegate(QStyledItemDelegate):
             _rounded(p, QRect(pb.left(), pb.top(), int(pb.width() * frac), 3), 1.5, QBrush(QColor(theme.ACCENT_LO)))
         else:
             p.drawText(QRect(x, r.top(), tw, r.height()), Qt.AlignmentFlag.AlignVCenter, name)
+        ix = r.right() - 22
         if fav:
-            p.drawPixmap(QRect(r.right() - 22, r.center().y() - 8, 16, 16), pixmap("star", theme.ACCENT, 16))
+            p.drawPixmap(QRect(ix, r.center().y() - 8, 16, 16), pixmap("star", theme.ACCENT, 16))
+            ix -= 20
+        if locked:
+            p.drawPixmap(QRect(ix, r.center().y() - 8, 16, 16), pixmap("lock", theme.WARN, 16))
         p.restore()
 
 
@@ -182,15 +189,15 @@ class PosterDelegate(QStyledItemDelegate):
         self.kind = kind
         self.cell = QSize(140, 248)
         self.f_title = QFont(theme.FONT)
-        self.f_title.setPixelSize(12)
+        self.f_title.setPixelSize(theme.fs(13))
         self.f_title.setWeight(QFont.Weight.DemiBold)
         self.f_meta = QFont(theme.FONT)
-        self.f_meta.setPixelSize(11)
+        self.f_meta.setPixelSize(theme.fs(12))
         self.f_ini = QFont(theme.FONT)
-        self.f_ini.setPixelSize(26)
+        self.f_ini.setPixelSize(theme.fs(26))
         self.f_ini.setWeight(QFont.Weight.Black)
         self.f_badge = QFont(theme.FONT)
-        self.f_badge.setPixelSize(10)
+        self.f_badge.setPixelSize(theme.fs(11))
         self.f_badge.setWeight(QFont.Weight.Bold)
 
     def sizeHint(self, option, index):
@@ -245,6 +252,10 @@ class PosterDelegate(QStyledItemDelegate):
             fr = QRect(pr.left() + 6, pr.top() + 6, 22, 22)
             _rounded(p, fr, 6, QBrush(QColor(0, 0, 0, 170)))
             p.drawPixmap(fr.adjusted(3, 3, -3, -3), pixmap("star", theme.ACCENT, 16))
+        if self.ctx.library and self.ctx.library.item_locked(self.kind, it):
+            lr = QRect(pr.left() + 6, pr.bottom() - 30, 22, 22)
+            _rounded(p, lr, 6, QBrush(QColor(0, 0, 0, 170)))
+            p.drawPixmap(lr.adjusted(3, 3, -3, -3), pixmap("lock", theme.WARN, 16))
         # İzleme ilerlemesi
         if self.kind == "movie" and self.ctx.userdata:
             prog = self.ctx.userdata.get_progress(f"movie:{it.id}")
@@ -254,16 +265,17 @@ class PosterDelegate(QStyledItemDelegate):
                 _rounded(p, bar, 2, QBrush(QColor(0, 0, 0, 160)))
                 _rounded(p, QRect(bar.left(), bar.top(), int(bar.width() * frac), 4), 2, QBrush(QColor(theme.ACCENT)))
         # Başlık
-        tr = QRect(cr.left() + pad, pr.bottom() + 6, pw, 32)
+        fm = QFontMetrics(self.f_title)
+        tr = QRect(cr.left() + pad, pr.bottom() + 6, pw, fm.lineSpacing() * 2 + 2)
         p.setFont(self.f_title)
         p.setPen(QColor(theme.ACCENT if hover else theme.TEXT))
-        fm = QFontMetrics(self.f_title)
         lines = self._wrap(it.name, fm, pw)
         p.drawText(tr, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter, "\n".join(lines))
         if it.year and it.year not in it.name:
             p.setFont(self.f_meta)
             p.setPen(QColor(theme.DIM))
-            p.drawText(QRect(tr.left(), tr.top() + 15 * len(lines) + 2, pw, 14), Qt.AlignmentFlag.AlignHCenter, it.year)
+            p.drawText(QRect(tr.left(), tr.top() + fm.lineSpacing() * len(lines) + 2, pw, theme.fs(16)),
+                       Qt.AlignmentFlag.AlignHCenter, it.year)
         p.restore()
 
     @staticmethod
@@ -286,6 +298,46 @@ class PosterDelegate(QStyledItemDelegate):
             rest = text[len(lines[0]):].strip()
             lines[1] = fm.elidedText(rest, Qt.TextElideMode.ElideRight, width)
         return lines or [text]
+
+
+LANG_NAMES = {"TR": N_("Türkçe"), "EN": N_("İngilizce"), "DE": N_("Almanca"), "FR": N_("Fransızca"),
+              "IT": N_("İtalyanca"), "ES": N_("İspanyolca"), "NL": N_("Felemenkçe"), "AR": N_("Arapça"),
+              "PT": N_("Portekizce"), "PL": N_("Lehçe"), "RU": N_("Rusça"), "AL": N_("Arnavutça"),
+              "GR": N_("Yunanca"), "RO": N_("Rumence"), "BG": N_("Bulgarca"), "SE": N_("İsveççe"),
+              "NO": N_("Norveççe"), "DK": N_("Danca"), "FI": N_("Fince"), "IN": N_("Hintçe"), "PK": N_("Urduca"),
+              "IR": N_("Farsça"), "KU": N_("Kürtçe"), "AZ": N_("Azerice"), "RS": N_("Sırpça"), "HR": N_("Hırvatça"),
+              "BA": N_("Boşnakça"), "UA": N_("Ukraynaca"), "HU": N_("Macarca"), "CZ": N_("Çekçe")}
+
+
+def lang_label(code):
+    name = LANG_NAMES.get(code)
+    return f"{_(name)} ({code})" if name else code
+
+
+class LangFilterBox(QComboBox):
+    """İçerik dili filtresi; listede en az iki dil bulunursa görünür."""
+
+    changedLang = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setToolTip(_("İçerik dili"))
+        self.setMinimumContentsLength(7)
+        self.currentIndexChanged.connect(lambda i: self.changedLang.emit(self.itemData(i) or ""))
+        self.hide()
+
+    def set_languages(self, langs, current=""):
+        """langs: [(kod, adet)]"""
+        self.blockSignals(True)
+        self.clear()
+        self.addItem(_("Tüm diller"), "")
+        for code, n in langs:
+            self.addItem(f"{lang_label(code)}  ·  {n}", code)
+        i = self.findData(current) if current else 0
+        self.setCurrentIndex(max(0, i))
+        self.blockSignals(False)
+        self.setVisible(len(langs) >= 2)
+        return self.itemData(self.currentIndex()) or ""
 
 
 class ListView(QListView):
@@ -377,7 +429,7 @@ class GridView(ListView):
         target = 150 if w > 900 else 136
         cols = max(2, w // target)
         cw = w // cols
-        ch = int((cw - 12) * 1.5) + 12 + 40
+        ch = int((cw - 12) * 1.5) + 12 + round(42 * max(1.0, theme.SCALE))
         size = QSize(cw, ch)
         if self.delegate.cell != size:
             self.delegate.cell = size
@@ -406,7 +458,7 @@ class ChipBar(QWidget):
         self.btn_r.clicked.connect(lambda: self._scroll(260))
         self.btn_all = QToolButton()
         self.btn_all.setIcon(icon("grid"))
-        self.btn_all.setToolTip("Tüm kategoriler")
+        self.btn_all.setToolTip(_("Tüm kategoriler"))
         self.btn_all.clicked.connect(self._open_picker)
         self.area = QScrollArea()
         self.area.setWidgetResizable(True)
@@ -484,12 +536,12 @@ class ChipBar(QWidget):
 class CategoryPicker(QDialog):
     def __init__(self, cats, current, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Kategoriler")
+        self.setWindowTitle(_("Kategoriler"))
         self.setModal(True)
         self.chosen = None
         self.cats = cats
         lay = QVBoxLayout(self)
-        self.search = SearchBox("Kategori ara…")
+        self.search = SearchBox(_("Kategori ara…"))
         lay.addWidget(self.search)
         from ..qt import QListWidget, QListWidgetItem  # noqa: PLC0415
         self.lst = QListWidget()
@@ -524,11 +576,11 @@ class CategoryPicker(QDialog):
 class SearchBox(QLineEdit):
     debounced = Signal(str)
 
-    def __init__(self, placeholder="Ara…", parent=None):
+    def __init__(self, placeholder=None, parent=None):
         super().__init__(parent)
         self.setObjectName("Search")
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        self.setPlaceholderText(placeholder)
+        self.setPlaceholderText(placeholder or _("Ara…"))
         self.setClearButtonEnabled(True)
         self._t = QTimer(self)
         self._t.setSingleShot(True)
@@ -559,21 +611,21 @@ class StatusView(QWidget):
         lay.addWidget(self.ic)
         self.msg = QLabel()
         self.msg.setObjectName("Muted")
-        self.msg.setStyleSheet("font-size:14px;")
+        self.msg.setStyleSheet(theme.scaled("font-size:15px;"))
         self.msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.msg.setWordWrap(True)
         lay.addWidget(self.msg)
-        self.btn = QPushButton("Tekrar dene")
+        self.btn = QPushButton(_("Tekrar dene"))
         self.btn.setObjectName("Primary")
         self.btn.clicked.connect(self.retry.emit)
         lay.addWidget(self.btn, 0, Qt.AlignmentFlag.AlignHCenter)
         lay.addStretch(2)
 
-    def loading(self, text="Yükleniyor…"):
+    def loading(self, text=None):
         self.spinner.show()
         self.ic.hide()
         self.btn.hide()
-        self.msg.setText(text)
+        self.msg.setText(text or _("Yükleniyor…"))
 
     def empty(self, text, ic="info"):
         self.spinner.hide()
@@ -620,7 +672,7 @@ class OnScreenKeyboard(QFrame):
         bottom = QHBoxLayout()
         bottom.setSpacing(5)
         for label, txt, stretch in (("?123", None, 1), ("http://", "http://", 1), (".", ".", 1), ("/", "/", 1),
-                                    (":", ":", 1), ("boşluk", " ", 4), (".com", ".com", 1), ("@", "@", 1)):
+                                    (":", ":", 1), (_("boşluk"), " ", 4), (".com", ".com", 1), ("@", "@", 1)):
             b = self._key(label, alt=label in ("?123", "http://", ".com"))
             if txt is None:
                 b.clicked.connect(self._toggle_sym)
@@ -628,7 +680,7 @@ class OnScreenKeyboard(QFrame):
             else:
                 b.clicked.connect(lambda _=False, t=txt: self._type(t))
             bottom.addWidget(b, stretch)
-        ok = self._key("Tamam", alt=True)
+        ok = self._key(_("Tamam"), alt=True)
         ok.clicked.connect(self._enter)
         hide = self._key("▼", alt=True)
         hide.clicked.connect(self.hide)

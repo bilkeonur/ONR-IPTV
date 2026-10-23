@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
+from ..i18n import _
 from .base import (EPISODE, LIVE, MOVIE, SERIES, Category, Item, Provider, ProviderError,
                    normalize_url, to_float, to_int, year_from)
 
@@ -55,33 +56,33 @@ class XtreamProvider(Provider):
         try:
             r = self.session.get(f"{self.base}/player_api.php", params=p, timeout=timeout)
         except Exception as e:  # noqa: BLE001
-            raise ProviderError(f"Sunucuya bağlanılamadı: {e}") from e
+            raise ProviderError(_("Sunucuya bağlanılamadı: {err}", err=e)) from e
         if r.status_code in (401, 403):
-            raise ProviderError("Kullanıcı adı veya şifre hatalı (yetkisiz erişim).")
+            raise ProviderError(_("Kullanıcı adı veya şifre hatalı (yetkisiz erişim)."))
         if r.status_code >= 400:
-            raise ProviderError(f"Sunucu hatası: HTTP {r.status_code}")
+            raise ProviderError(_("Sunucu hatası: HTTP {code}", code=r.status_code))
         text = r.text.strip()
         if not text:
             return []
         try:
             return r.json()
         except ValueError as e:
-            raise ProviderError("Sunucudan geçersiz yanıt geldi (Xtream API değil mi?).") from e
+            raise ProviderError(_("Sunucudan geçersiz yanıt geldi (Xtream API değil mi?).")) from e
 
     def authenticate(self):
         data = self._api(timeout=20)
         if not isinstance(data, dict) or "user_info" not in data:
-            raise ProviderError("Geçersiz Xtream yanıtı. URL'yi kontrol edin.")
+            raise ProviderError(_("Geçersiz Xtream yanıtı. URL'yi kontrol edin."))
         ui = data.get("user_info") or {}
         if str(ui.get("auth", "1")) == "0":
-            raise ProviderError("Kullanıcı adı veya şifre hatalı.")
+            raise ProviderError(_("Kullanıcı adı veya şifre hatalı."))
         si = data.get("server_info") or {}
         self.server_tz = si.get("timezone")
         formats = ui.get("allowed_output_formats") or []
         exp = to_int(ui.get("exp_date"))
         return {
             "status": ui.get("status", ""),
-            "expires": datetime.fromtimestamp(exp).strftime("%d.%m.%Y") if exp else "Sınırsız",
+            "expires": datetime.fromtimestamp(exp).strftime("%d.%m.%Y") if exp else _("Sınırsız"),
             "max_connections": ui.get("max_connections", ""),
             "active_connections": ui.get("active_cons", ""),
             "trial": str(ui.get("is_trial", "0")) == "1",
@@ -177,7 +178,7 @@ class XtreamProvider(Provider):
                 ei = e.get("info") or {}
                 if not isinstance(ei, dict):
                     ei = {}
-                title = e.get("title") or f"Bölüm {e.get('episode_num')}"
+                title = e.get("title") or _("Bölüm {n}", n=e.get("episode_num"))
                 out.append(Item(EPISODE, e.get("id"), title, ei.get("movie_image") or item.logo,
                                 item.category_id, to_int(e.get("episode_num")), "",
                                 e.get("container_extension") or "mp4", 0, to_float(ei.get("rating")), "",

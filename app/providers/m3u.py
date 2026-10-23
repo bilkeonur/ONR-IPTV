@@ -7,6 +7,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+from ..i18n import _
 from .base import (EPISODE, LIVE, MOVIE, SERIES, Category, Item, Provider, ProviderError,
                    normalize_url, stable_id, year_from)
 
@@ -72,7 +73,7 @@ def parse_m3u(text):
             if info is None:
                 info = (os.path.basename(line.split("?")[0]) or line, {})
             name, attrs = info
-            group = attrs.get("group-title") or group_override or "Diğer"
+            group = attrs.get("group-title") or group_override or _("Diğer")
             entries.append((_classify(line, group), name, line, attrs, group, opts))
             info, opts, group_override = None, {}, None
     return entries, header
@@ -118,10 +119,10 @@ class M3UProvider(Provider):
             return self._data
         text = self._load_text()
         if "#EXTINF" not in text and "://" not in text:
-            raise ProviderError("Geçerli bir M3U listesi bulunamadı.")
+            raise ProviderError(_("Geçerli bir M3U listesi bulunamadı."))
         entries, header = parse_m3u(text)
         if not entries:
-            raise ProviderError("Listede hiç yayın bulunamadı.")
+            raise ProviderError(_("Listede hiç yayın bulunamadı."))
         if not self.epg_url:
             self.epg_url = (header.get("url-tvg") or header.get("x-tvg-url") or "").split(",")[0].strip()
 

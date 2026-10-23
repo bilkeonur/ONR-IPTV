@@ -31,26 +31,29 @@ def main():
     import locale
     locale.setlocale(locale.LC_NUMERIC, "C")  # libmpv bunu gerektirir
 
+    settings = config.Settings()
+    from app import i18n
+    i18n.load(i18n.resolve(settings.get("ui_language")))
     from app.ui import theme
+    theme.set_scale(settings.get("font_scale"))
     from app.ui.icons import icon
     f = QFont(theme.FONT)
-    f.setPixelSize(13)
+    f.setPixelSize(theme.fs(14))
     app.setFont(f)
-    app.setStyleSheet(theme.QSS)
+    app.setStyleSheet(theme.qss())
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     ico = os.path.join(base, "assets", "icon.png")
     app.setWindowIcon(QIcon(ico) if os.path.exists(ico) else icon("live", theme.ACCENT, theme.ACCENT, 64))
 
-    settings = config.Settings()
     try:
         from app.ui.main_window import MainWindow
         win = MainWindow(settings)
     except OSError as e:
         from app.qt import QMessageBox
         QMessageBox.critical(None, config.APP_NAME,
-                             f"Video motoru (libmpv) yüklenemedi:\n{e}\n\n"
-                             "Windows: lib/libmpv-2.dll dosyasının olduğundan emin olun.\n"
-                             "Raspberry Pi: sudo apt install libmpv2")
+                             i18n.tr("Video motoru (libmpv) yüklenemedi:\n{err}\n\n"
+                                     "Windows: lib/libmpv-2.dll dosyasının olduğundan emin olun.\n"
+                                     "Raspberry Pi: sudo apt install libmpv2", err=e))
         return 1
 
     screen = app.primaryScreen().availableGeometry()
@@ -59,7 +62,13 @@ def main():
     else:
         win.resize(min(1280, screen.width() - 80), min(780, screen.height() - 80))
         win.show()
-    return app.exec()
+    code = app.exec()
+    if getattr(win, "restart_requested", False):
+        # Dil / yazı boyutu değişikliği: ayarlar kaydedildikten sonra yeni örnek başlatılır
+        from app.qt import QProcess
+        args = sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv
+        QProcess.startDetached(sys.executable, args)
+    return code
 
 
 if __name__ == "__main__":

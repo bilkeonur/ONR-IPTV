@@ -7,6 +7,7 @@ import time
 import mpv
 
 from .. import config
+from ..i18n import _
 from ..qt import (QAbstractItemView, QByteArray, QColor, QCursor, QFrame, QHBoxLayout, QLabel, QListView,
                   QMenu, QObject, QOpenGLContext, QOpenGLWidget, QPainter, QPen, QRectF, QSize, QSlider, Qt,
                   QTimer, QToolButton, QVBoxLayout, QWidget, Signal)
@@ -235,7 +236,7 @@ class Spinner(QWidget):
         if self.text:
             p.setPen(QColor(theme.TEXT))
             f = p.font()
-            f.setPixelSize(11)
+            f.setPixelSize(theme.fs(11))
             f.setBold(True)
             p.setFont(f)
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text)
@@ -277,6 +278,7 @@ class PlayerWidget(QWidget):
     playbackEnded = Signal()
     recordToggled = Signal(bool)
     windowFullscreenToggled = Signal()
+    castRequested = Signal(object)       # düğme (menünün açılacağı yer)
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -343,7 +345,7 @@ class PlayerWidget(QWidget):
         self.top.setObjectName("OsdTop")
         tl = QHBoxLayout(self.top)
         tl.setContentsMargins(14, 10, 18, 26)
-        self.btn_back = _tbtn("back", "Geri (Esc)", 28)
+        self.btn_back = _tbtn("back", _("Geri (Esc)"), 28)
         self.btn_back.clicked.connect(self.exitRequested.emit)
         tl.addWidget(self.btn_back)
         tcol = QVBoxLayout()
@@ -355,10 +357,14 @@ class PlayerWidget(QWidget):
         tcol.addWidget(self.lbl_title)
         tcol.addWidget(self.lbl_sub)
         tl.addLayout(tcol, 1)
-        self.lbl_rec = QLabel("● KAYIT")
+        self.lbl_rec = QLabel(_("● KAYIT"))
         self.lbl_rec.setObjectName("RecBadge")
         self.lbl_rec.hide()
         tl.addWidget(self.lbl_rec)
+        self.lbl_cast = QLabel()
+        self.lbl_cast.setObjectName("Badge")
+        self.lbl_cast.hide()
+        tl.addWidget(self.lbl_cast)
         self.lbl_clock = QLabel()
         self.lbl_clock.setObjectName("OsdTitle")
         tl.addWidget(self.lbl_clock)
@@ -387,43 +393,44 @@ class PlayerWidget(QWidget):
 
         brow = QHBoxLayout()
         brow.setSpacing(2)
-        self.btn_prev = _tbtn("prev", "Önceki kanal (↑)")
+        self.btn_prev = _tbtn("prev", _("Önceki kanal (↑)"))
         self.btn_prev.clicked.connect(lambda: self.channelStep.emit(-1))
-        self.btn_rew = _tbtn("rewind", "10 sn geri (←)")
+        self.btn_rew = _tbtn("rewind", _("10 sn geri (←)"))
         self.btn_rew.clicked.connect(lambda: self.seek_rel(-10))
-        self.btn_play = _tbtn("pause", "Oynat/Duraklat (Boşluk)", 34)
+        self.btn_play = _tbtn("pause", _("Oynat/Duraklat (Boşluk)"), 34)
         self.btn_play.clicked.connect(self.toggle_pause)
-        self.btn_fwd = _tbtn("forward", "10 sn ileri (→)")
+        self.btn_fwd = _tbtn("forward", _("10 sn ileri (→)"))
         self.btn_fwd.clicked.connect(lambda: self.seek_rel(10))
-        self.btn_next = _tbtn("next", "Sonraki kanal (↓)")
+        self.btn_next = _tbtn("next", _("Sonraki kanal (↓)"))
         self.btn_next.clicked.connect(lambda: self.channelStep.emit(1))
         for b in (self.btn_prev, self.btn_rew, self.btn_play, self.btn_fwd, self.btn_next):
             brow.addWidget(b)
         self.lbl_epg = QLabel()
         self.lbl_epg.setObjectName("OsdText")
         brow.addSpacing(10)
-        brow.addWidget(self.lbl_epg, 1)
+        brow.addWidget(self.lbl_epg, 100)
+        brow.addStretch(1)  # önizlemede EPG yazısı gizliyken düğmeleri yaslar
 
-        self.btn_list = _tbtn("list", "Kanal listesi (L)")
+        self.btn_list = _tbtn("list", _("Kanal listesi (L)"))
         self.btn_list.clicked.connect(self.toggle_drawer)
-        self.btn_fav = _tbtn("star_border", "Favori")
+        self.btn_fav = _tbtn("star_border", _("Favori"))
         self.btn_fav.clicked.connect(self.favoriteToggled.emit)
-        self.btn_rec = _tbtn("record", "Kaydet (R)")
+        self.btn_rec = _tbtn("record", _("Kaydet (R)"))
         self.btn_rec.clicked.connect(self.toggle_record)
-        self.btn_audio = _tbtn("audio", "Ses dili (A)")
+        self.btn_audio = _tbtn("audio", _("Ses dili (A)"))
         self.btn_audio.clicked.connect(lambda: self._track_menu("audio", self.btn_audio))
-        self.btn_sub = _tbtn("subtitles", "Altyazı (S)")
+        self.btn_sub = _tbtn("subtitles", _("Altyazı (S)"))
         self.btn_sub.clicked.connect(lambda: self._track_menu("sub", self.btn_sub))
-        self.btn_aspect = _tbtn("aspect", "Görüntü oranı")
+        self.btn_aspect = _tbtn("aspect", _("Görüntü oranı"))
         self.btn_aspect.clicked.connect(self._aspect_menu)
         self.btn_speed = QToolButton()
         self.btn_speed.setText("1x")
-        self.btn_speed.setToolTip("Oynatma hızı")
+        self.btn_speed.setToolTip(_("Oynatma hızı"))
         self.btn_speed.setMinimumSize(42, 42)
         self.btn_speed.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.btn_speed.setStyleSheet("font-weight:800; font-size:13px;")
+        self.btn_speed.setStyleSheet(theme.scaled("font-weight:800; font-size:14px;"))
         self.btn_speed.clicked.connect(self._speed_menu)
-        self.btn_mute = _tbtn("volume", "Ses (M)")
+        self.btn_mute = _tbtn("volume", _("Ses (M)"))
         self.btn_mute.clicked.connect(self.toggle_mute)
         self.vol = QSlider(Qt.Orientation.Horizontal)
         self.vol.setRange(0, 130)
@@ -431,12 +438,20 @@ class PlayerWidget(QWidget):
         self.vol.setValue(int(self.settings.get("volume", 100)))
         self.vol.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.vol.valueChanged.connect(self._set_volume)
-        self.btn_fs = _tbtn("fullscreen", "Tam ekran (F)")
+        self.btn_fs = _tbtn("fullscreen", _("Tam ekran (F)"))
         self.btn_fs.clicked.connect(self.windowFullscreenToggled.emit)
+        self.btn_cast = _tbtn("cast", _("Chromecast'e gönder"))
+        self.btn_cast.clicked.connect(lambda: self.castRequested.emit(self.btn_cast))
+        from ..cast import available as _cast_available  # noqa: PLC0415
+        self._cast_ok = _cast_available()
+        # Önizleme modunda tam ekran oynatıcıya geçiş
+        self.btn_expand = _tbtn("fullscreen", _("Tam ekran izle"))
+        self.btn_expand.clicked.connect(self.fullRequested.emit)
         for b in (self.btn_list, self.btn_fav, self.btn_rec, self.btn_audio, self.btn_sub, self.btn_aspect,
-                  self.btn_speed, self.btn_mute, self.vol, self.btn_fs):
+                  self.btn_speed, self.btn_cast, self.btn_mute, self.vol, self.btn_fs, self.btn_expand):
             brow.addWidget(b)
         bl.addLayout(brow)
+        self._bottom_lay = bl
 
         # Orta: yükleniyor
         self.spinner = Spinner(self, 60)
@@ -459,22 +474,12 @@ class PlayerWidget(QWidget):
         self.toast_timer.setSingleShot(True)
         self.toast_timer.timeout.connect(self.toast.hide)
 
-        # Önizleme modu: büyütme ipucu
-        self.expand_btn = QToolButton(self)
-        self.expand_btn.setIcon(icon("fullscreen", "#ffffff"))
-        self.expand_btn.setIconSize(QSize(22, 22))
-        self.expand_btn.setStyleSheet("QToolButton{background:rgba(0,0,0,0.55);border-radius:8px;padding:6px;}"
-                                      f"QToolButton:hover{{background:{theme.ACCENT_LO};}}")
-        self.expand_btn.setToolTip("Tam ekran izle")
-        self.expand_btn.clicked.connect(self.fullRequested.emit)
-        self.expand_btn.hide()
-
         # Kanal çekmecesi
         self.drawer = QFrame(self)
         self.drawer.setObjectName("Drawer")
         dl = QVBoxLayout(self.drawer)
         dl.setContentsMargins(8, 12, 8, 8)
-        self.drawer_title = QLabel("Kanallar")
+        self.drawer_title = QLabel(_("Kanallar"))
         self.drawer_title.setObjectName("H2")
         dl.addWidget(self.drawer_title)
         self.drawer_list = QListView()
@@ -489,20 +494,46 @@ class PlayerWidget(QWidget):
         for w in self.overlay_widgets:
             w.hide()
         self.osd_visible = False
+        self._fav_state = None
+        self._sync_controls()
 
+    def _sync_controls(self):
+        """Düğmeleri moda (önizleme / tam) ve içerik türüne (canlı / VOD) göre gösterir."""
+        full = self.mode == "full"
+        live = self.is_live
+        vis = {
+            self.btn_prev: full and live, self.btn_next: full and live, self.btn_list: full and live,
+            self.btn_rec: full and live, self.btn_rew: full and not live, self.btn_fwd: full and not live,
+            self.btn_speed: full and not live, self.btn_fav: full and self._fav_state is not None,
+            self.btn_audio: full, self.btn_sub: full, self.btn_aspect: full, self.btn_fs: full,
+            self.btn_cast: full and self._cast_ok,
+            self.btn_expand: not full, self.lbl_epg: full, self.lbl_pos: full, self.slider: full,
+            self.lbl_dur: full,
+        }
+        for w, v in vis.items():
+            w.setVisible(v)
+        self.vol.setFixedWidth(90 if full else 70)
+        if full:
+            self._bottom_lay.setContentsMargins(18, 30, 18, 12)
+        else:
+            self._bottom_lay.setContentsMargins(6, 18, 6, 4)
+        self._layout_overlay()
     def set_drawer_model(self, model, delegate):
         self.drawer_list.setModel(model)
         self.drawer_list.setItemDelegate(delegate)
 
     def resizeEvent(self, e):
+        self._layout_overlay()
+
+    def _layout_overlay(self):
         w, h = self.width(), self.height()
         self.surface.setGeometry(0, 0, w, h)
         self.top.setGeometry(0, 0, w, 84)
+        self.bottom.layout().activate()
         bh = self.bottom.sizeHint().height()
         self.bottom.setGeometry(0, h - bh, w, bh)
         self.spinner.move((w - self.spinner.width()) // 2, (h - self.spinner.height()) // 2)
         self.center_play.move((w - 76) // 2, (h - 76) // 2)
-        self.expand_btn.move(w - 46, h - 46)
         dw = min(340, int(w * 0.4))
         self.drawer.setGeometry(0, 0, dw, h)
         self._place_toast()
@@ -527,21 +558,25 @@ class PlayerWidget(QWidget):
             return
         self.show()
         self.raise_()
+        self._sync_controls()
         if mode == "full":
-            self.expand_btn.hide()
             self.show_osd()
             self.setFocus()
         else:
             self.hide_osd(force=True)
             self.drawer.hide()
             self.unsetCursor()
+        self._update_center_play()
         self._place_toast()
 
     def show_osd(self):
-        if self.mode != "full":
+        if self.mode == "hidden":
             return
         self.unsetCursor()
-        for w in self.overlay_widgets:
+        if self.mode != "full":
+            self.top.hide()
+        # Önizlemede sadece alttaki küçük kontrol çubuğu gösterilir
+        for w in (self.overlay_widgets if self.mode == "full" else [self.bottom]):
             w.show()
             w.raise_()
         self.toast.raise_()
@@ -559,7 +594,7 @@ class PlayerWidget(QWidget):
             self.setCursor(QCursor(Qt.CursorShape.BlankCursor))
 
     def _auto_hide(self):
-        if self.mode == "full":
+        if self.mode != "hidden":
             under = self.childAt(self.mapFromGlobal(QCursor.pos()))
             if under is not None and under is not self.surface and self.bottom.isAncestorOf(under):
                 self.hide_timer.start()
@@ -585,29 +620,32 @@ class PlayerWidget(QWidget):
 
     # ---------------------------------------------------------- Olaylar
     def mouseMoveEvent(self, e):
-        if self.mode == "full":
+        if self.mode != "hidden":
             if not self.osd_visible:
                 self.show_osd()
             else:
                 self.hide_timer.start()
-        elif self.mode == "preview":
-            self.expand_btn.show()
-            self.expand_btn.raise_()
-            self.hide_timer.start()
         super().mouseMoveEvent(e)
 
     def leaveEvent(self, e):
-        if self.mode == "preview":
-            self.expand_btn.hide()
+        if self.mode == "preview" and not self.paused:
+            self.hide_osd(force=True)
         super().leaveEvent(e)
 
+    def _on_video(self, pos):
+        """Tıklama kontrol çubuklarına değil videonun kendisine mi?"""
+        w = self.childAt(pos)
+        return w is None or w is self.surface
+
     def mousePressEvent(self, e):
-        if e.button() == Qt.MouseButton.LeftButton:
+        if e.button() == Qt.MouseButton.LeftButton and self._on_video(e.position().toPoint()):
             self._click_timer.start()
         super().mousePressEvent(e)
 
     def mouseDoubleClickEvent(self, e):
         self._click_timer.stop()
+        if not self._on_video(e.position().toPoint()):
+            return
         if self.mode == "preview":
             self.fullRequested.emit()
         else:
@@ -615,7 +653,9 @@ class PlayerWidget(QWidget):
 
     def _single_click(self):
         if self.mode == "preview":
-            self.fullRequested.emit()
+            # Önizlemede tek dokunuş oynat/duraklat; çift dokunuş tam ekran
+            self.toggle_pause()
+            self.show_osd()
         elif self.mode == "full":
             if self.drawer.isVisible():
                 self.drawer.hide()
@@ -625,10 +665,10 @@ class PlayerWidget(QWidget):
                 self.show_osd()
 
     def wheelEvent(self, e):
-        if self.mode == "full":
+        if self.mode != "hidden":
             d = 5 if e.angleDelta().y() > 0 else -5
             self.vol.setValue(self.vol.value() + d)
-            self.show_toast(f"Ses: {self.vol.value()}%", 900)
+            self.show_toast(_("Ses: {v}%", v=self.vol.value()), 900)
 
     def keyPressEvent(self, e):
         k = e.key()
@@ -700,12 +740,9 @@ class PlayerWidget(QWidget):
         self.lbl_sub.setText(subtitle)
         self.lbl_epg.setText("")
         self.slider.setRange(0, 0)
-        self.lbl_pos.setText("CANLI" if live else "00:00")
+        self.lbl_pos.setText(_("CANLI") if live else "00:00")
         self.lbl_dur.setText("")
-        for b in (self.btn_prev, self.btn_next, self.btn_list, self.btn_rec):
-            b.setVisible(live)
-        for b in (self.btn_rew, self.btn_fwd, self.btn_speed):
-            b.setVisible(not live)
+        self._sync_controls()
         self.slider.setEnabled(not live)
         self.btn_speed.setText("1x")
         self.core.mpv.speed = 1.0
@@ -721,6 +758,8 @@ class PlayerWidget(QWidget):
             self.surface.update()
         else:
             self.core.load(url, start)
+        if start and start > 5 and not live:
+            self.show_toast(_("Kaldığı yerden devam: {time}", time=fmt_time(start)), 2500)
 
     def stop(self):
         self._stopped_by_user = True
@@ -733,8 +772,19 @@ class PlayerWidget(QWidget):
         self.item = None
         self.url = ""
 
+    def set_casting(self, name):
+        """Chromecast'te oynatılırken üst çubukta cihaz adı gösterilir."""
+        self.lbl_cast.setText(_("TV'de oynatılıyor: {name}", name=name) if name else "")
+        self.lbl_cast.setVisible(bool(name))
+        self.btn_cast.setIcon(icon("cast", theme.ACCENT if name else "#ffffff"))
+
     def set_favorite(self, fav):
-        self.btn_fav.setIcon(icon("star" if fav else "star_border", theme.ACCENT if fav else "#ffffff"))
+        """fav: True/False; None ise içerik favorilere eklenemez ve düğme gizlenir."""
+        self._fav_state = fav
+        if fav is not None:
+            self.btn_fav.setIcon(icon("star" if fav else "star_border", theme.ACCENT if fav else "#ffffff"))
+            self.btn_fav.setToolTip(_("Favorilerden çıkar") if fav else _("Favorilere ekle"))
+        self._sync_controls()
 
     def set_epg(self, cur, nxt):
         self.epg_now = cur
@@ -760,7 +810,7 @@ class PlayerWidget(QWidget):
             self.lbl_dur.setText(time.strftime("%H:%M", time.localtime(cur["end"])))
         else:
             self.slider.setRange(0, 0)
-            self.lbl_pos.setText("CANLI")
+            self.lbl_pos.setText(_("CANLI"))
             self.lbl_dur.setText("")
 
     def toggle_pause(self):
@@ -773,7 +823,7 @@ class PlayerWidget(QWidget):
             return
         try:
             self.core.mpv.seek(sec, "relative")
-            self.show_toast(("+" if sec > 0 else "") + f"{sec} sn", 700)
+            self.show_toast(("+" if sec > 0 else "") + _("{n} sn", n=sec), 700)
         except Exception:  # noqa: BLE001
             pass
 
@@ -822,9 +872,7 @@ class PlayerWidget(QWidget):
         elif name == "pause":
             self.paused = bool(value)
             self.btn_play.setIcon(icon("play" if self.paused else "pause", "#ffffff"))
-            self.center_play.setVisible(self.paused and self.mode == "full" and bool(self.url))
-            if self.center_play.isVisible():
-                self.center_play.raise_()
+            self._update_center_play()
             if self.paused:
                 self.show_osd()
         elif name == "paused-for-cache":
@@ -844,6 +892,12 @@ class PlayerWidget(QWidget):
         elif name == "mute":
             self.btn_mute.setIcon(icon("volume_off" if value else "volume", "#ffffff"))
 
+    def _update_center_play(self):
+        self.center_play.setVisible(self.paused and self.mode != "hidden" and bool(self.url))
+        if self.center_play.isVisible():
+            self.center_play.raise_()
+            self.bottom.raise_()
+
     def _on_loaded(self):
         self.spinner.hide()
         self._retries = 0
@@ -853,13 +907,13 @@ class PlayerWidget(QWidget):
             return
         if self.is_live and self.settings.get("auto_reconnect", True) and self.url and self._retries < 6:
             self._retries += 1
-            self.show_toast(f"Yayın kesildi, yeniden bağlanılıyor… ({self._retries})", 2500)
+            self.show_toast(_("Yayın kesildi, yeniden bağlanılıyor… ({n})", n=self._retries), 2500)
             self.spinner.show()
             self.retry_timer.start(1200 * self._retries)
             return
         self.spinner.hide()
         if reason == "error":
-            self.show_toast("Yayın açılamadı" + (f": {err}" if err else ""), 4000)
+            self.show_toast(_("Yayın açılamadı") + (f": {err}" if err else ""), 4000)
         elif reason == "eof" and not self.is_live:
             if self.duration:
                 self.progress.emit(self.duration, self.duration)
@@ -881,14 +935,14 @@ class PlayerWidget(QWidget):
         menu = QMenu(self)
         tracks = [t for t in self.tracks if t.get("type") == kind]
         if kind == "sub":
-            a = menu.addAction("Kapalı")
+            a = menu.addAction(_("Kapalı"))
             a.setCheckable(True)
             a.setChecked(not any(t.get("selected") for t in tracks))
             a.triggered.connect(lambda: setattr(self.core.mpv, "sid", "no"))
         if not tracks and kind == "audio":
-            menu.addAction("Ses parçası yok").setEnabled(False)
+            menu.addAction(_("Ses parçası yok")).setEnabled(False)
         for t in tracks:
-            name = t.get("title") or t.get("lang") or f"Parça {t.get('id')}"
+            name = t.get("title") or t.get("lang") or _("Parça {n}", n=t.get("id"))
             if t.get("lang") and t.get("title"):
                 name = f"{t['title']} ({t['lang']})"
             if t.get("codec"):
@@ -903,9 +957,9 @@ class PlayerWidget(QWidget):
 
     def _aspect_menu(self):
         menu = QMenu(self)
-        opts = [("Otomatik", "-1", 0.0, True), ("16:9", "16:9", 0.0, True), ("4:3", "4:3", 0.0, True),
-                ("21:9", "2.33", 0.0, True), ("Ekranı doldur (kırp)", "-1", 1.0, True),
-                ("Uzat", "-1", 0.0, False)]
+        opts = [(_("Otomatik"), "-1", 0.0, True), ("16:9", "16:9", 0.0, True), ("4:3", "4:3", 0.0, True),
+                ("21:9", "2.33", 0.0, True), (_("Ekranı doldur (kırp)"), "-1", 1.0, True),
+                (_("Uzat"), "-1", 0.0, False)]
         for label, asp, pan, keep in opts:
             a = menu.addAction(label)
             a.triggered.connect(lambda _=False, x=asp, p=pan, k=keep: self._set_aspect(x, p, k))
@@ -943,12 +997,12 @@ class PlayerWidget(QWidget):
             try:
                 self.core.mpv["stream-record"] = path
             except Exception as e:  # noqa: BLE001
-                self.show_toast(f"Kayıt başlatılamadı: {e}")
+                self.show_toast(_("Kayıt başlatılamadı: {err}", err=e))
                 return
             self.recording = path
             self.lbl_rec.show()
             self.btn_rec.setIcon(icon("record", theme.DANGER))
-            self.show_toast("Kayıt başladı")
+            self.show_toast(_("Kayıt başladı"))
             self.recordToggled.emit(True)
         else:
             try:
@@ -959,7 +1013,7 @@ class PlayerWidget(QWidget):
             self.recording = False
             self.lbl_rec.hide()
             self.btn_rec.setIcon(icon("record", "#ffffff"))
-            self.show_toast("Kayıt kaydedildi → İndirilenler")
+            self.show_toast(_("Kayıt kaydedildi → İndirilenler"))
             self.last_record = path
             self.recordToggled.emit(False)
 

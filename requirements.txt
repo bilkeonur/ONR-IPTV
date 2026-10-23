@@ -1,3 +1,4 @@
 PySide6>=6.5
 python-mpv>=1.0.4
 requests>=2.28
+pychromecast>=14

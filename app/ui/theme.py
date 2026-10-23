@@ -1,5 +1,6 @@
 """Koyu gri + turkuaz tema."""
 import os
+import re
 
 from ..config import CACHE_DIR, IS_WINDOWS
 
@@ -19,6 +20,28 @@ DANGER = "#ff5c6c"
 WARN = "#ffb547"
 
 FONT = "Segoe UI" if IS_WINDOWS else "Noto Sans"
+
+# Yazı boyutu ölçeği (Menü → Görünüm). Tüm piksel font boyutları fs() / scaled() üzerinden geçer.
+SCALES = {"small": 0.92, "normal": 1.0, "large": 1.12, "xlarge": 1.25}
+SCALE = 1.0
+
+
+def set_scale(name):
+    global SCALE
+    SCALE = SCALES.get(name, 1.0)
+
+
+def fs(px):
+    """Ölçeklenmiş font boyutu (piksel)."""
+    return max(1, round(px * SCALE))
+
+
+_FS_RE = re.compile(r"font-size:\s*(\d+)px")
+
+
+def scaled(css):
+    """Stil metnindeki font-size değerlerini ölçeğe göre büyütür."""
+    return _FS_RE.sub(lambda m: f"font-size:{fs(int(m.group(1)))}px", css)
 
 
 def _asset(name, svg):
@@ -48,7 +71,7 @@ CHK_ON = _asset("chk_on.svg", f'<svg xmlns="http://www.w3.org/2000/svg" width="2
 CHK_OFF = _asset("chk_off.svg", f'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">'
                                 f'<rect x="1.5" y="1.5" width="17" height="17" rx="5" fill="{SURFACE3}" stroke="{BORDER}"/></svg>')
 
-QSS = f"""
+_QSS = f"""
 * {{
     font-family: "{FONT}", "DejaVu Sans", sans-serif;
     color: {TEXT};
@@ -61,21 +84,21 @@ QToolTip {{ background: {SURFACE3}; color: {TEXT}; border: 1px solid {BORDER}; p
 /* --- Kenar çubuğu --- */
 #Sidebar {{ background: {SURFACE}; border-right: 1px solid {BORDER}; }}
 #Brand {{ font-size: 19px; font-weight: 800; color: {ACCENT}; letter-spacing: 1px; }}
-#BrandSub {{ font-size: 10px; color: {MUTED}; letter-spacing: 3px; }}
+#BrandSub {{ font-size: 11px; color: {MUTED}; letter-spacing: 3px; }}
 #NavButton {{
     background: transparent; border: none; border-radius: 10px;
-    padding: 0 12px; text-align: left; font-size: 14px; font-weight: 600; color: {MUTED};
+    padding: 0 12px; text-align: left; font-size: 15px; font-weight: 600; color: {MUTED};
     min-height: 44px;
 }}
 #NavButton:hover {{ background: {SURFACE2}; color: {TEXT}; }}
 #NavButton:checked {{ background: {ACCENT_BG}; color: {ACCENT}; }}
-#SideInfo {{ color: {MUTED}; font-size: 11px; }}
-#Clock {{ color: {TEXT}; font-size: 22px; font-weight: 300; }}
+#SideInfo {{ color: {MUTED}; font-size: 13px; }}
+#Clock {{ color: {TEXT}; font-size: 24px; font-weight: 300; }}
 
 /* --- Genel düğmeler --- */
 QPushButton {{
     background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 9px;
-    padding: 7px 14px; font-size: 13px; font-weight: 600; min-height: 22px;
+    padding: 7px 14px; font-size: 14px; font-weight: 600; min-height: 22px;
 }}
 QPushButton:hover {{ background: {SURFACE3}; border-color: {ACCENT_LO}; }}
 QPushButton:pressed {{ background: {ACCENT_LO}; }}
@@ -95,7 +118,7 @@ QToolButton:checked {{ background: {ACCENT_BG}; }}
 #ChipBar {{ background: {BG}; }}
 QPushButton#Chip {{
     background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 16px;
-    padding: 5px 14px; font-size: 13px; font-weight: 600; color: {MUTED}; min-height: 20px;
+    padding: 5px 14px; font-size: 14px; font-weight: 600; color: {MUTED}; min-height: 20px;
 }}
 QPushButton#Chip:hover {{ color: {TEXT}; border-color: {ACCENT_LO}; }}
 QPushButton#Chip:checked {{ background: {ACCENT}; color: #06201e; border-color: {ACCENT}; }}
@@ -103,7 +126,7 @@ QPushButton#Chip:checked {{ background: {ACCENT}; color: #06201e; border-color: 
 /* --- Girdiler --- */
 QLineEdit, QSpinBox, QComboBox {{
     background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 9px;
-    padding: 7px 10px; font-size: 13px; selection-background-color: {ACCENT_LO};
+    padding: 7px 10px; font-size: 14px; selection-background-color: {ACCENT_LO};
 }}
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: {ACCENT}; }}
 QLineEdit#Search {{ padding-left: 32px; border-radius: 18px; }}
@@ -113,7 +136,7 @@ QComboBox QAbstractItemView {{
     background: {SURFACE2}; border: 1px solid {BORDER}; selection-background-color: {ACCENT_BG};
     selection-color: {ACCENT}; padding: 4px; outline: none;
 }}
-QCheckBox {{ font-size: 13px; spacing: 10px; }}
+QCheckBox {{ font-size: 14px; spacing: 10px; }}
 QCheckBox::indicator {{ width: 40px; height: 22px; image: url("{SW_OFF}"); }}
 QCheckBox::indicator:checked {{ image: url("{SW_ON}"); }}
 QListWidget::indicator {{ width: 20px; height: 20px; image: url("{CHK_OFF}"); }}
@@ -141,11 +164,11 @@ QAbstractScrollArea {{ background: transparent; }}
 /* --- Kartlar / paneller --- */
 #Card {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 14px; }}
 #Panel {{ background: {SURFACE}; border-radius: 12px; }}
-#Title {{ font-size: 22px; font-weight: 800; }}
-#H2 {{ font-size: 16px; font-weight: 700; }}
-#Muted {{ color: {MUTED}; font-size: 12px; }}
+#Title {{ font-size: 23px; font-weight: 800; }}
+#H2 {{ font-size: 17px; font-weight: 700; }}
+#Muted {{ color: {MUTED}; font-size: 13px; }}
 #Accent {{ color: {ACCENT}; font-weight: 700; }}
-#Badge {{ background: {ACCENT_BG}; color: {ACCENT}; border-radius: 8px; padding: 2px 8px; font-size: 11px; font-weight: 700; }}
+#Badge {{ background: {ACCENT_BG}; color: {ACCENT}; border-radius: 8px; padding: 2px 8px; font-size: 12px; font-weight: 700; }}
 
 QProgressBar {{ background: {SURFACE3}; border: none; border-radius: 3px; height: 6px; text-align: center; font-size: 1px; color: transparent; }}
 QProgressBar::chunk {{ background: {ACCENT}; border-radius: 3px; }}
@@ -157,13 +180,13 @@ QSlider::handle:horizontal:hover {{ background: {ACCENT_HI}; }}
 QSlider::handle:horizontal:disabled {{ background: transparent; width: 0; margin: 0; }}
 QSlider::sub-page:horizontal:disabled {{ background: {ACCENT}; }}
 
-QTabBar::tab {{ background: transparent; color: {MUTED}; padding: 8px 16px; font-weight: 700; font-size: 13px; border-bottom: 2px solid transparent; }}
+QTabBar::tab {{ background: transparent; color: {MUTED}; padding: 8px 16px; font-weight: 700; font-size: 14px; border-bottom: 2px solid transparent; }}
 QTabBar::tab:selected {{ color: {ACCENT}; border-bottom: 2px solid {ACCENT}; }}
 QTabBar::tab:hover {{ color: {TEXT}; }}
 QTabWidget::pane {{ border: none; }}
 
 QMenu {{ background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 10px; padding: 6px; }}
-QMenu::item {{ padding: 8px 26px 8px 14px; border-radius: 6px; font-size: 13px; }}
+QMenu::item {{ padding: 8px 26px 8px 14px; border-radius: 6px; font-size: 14px; }}
 QMenu::item:selected {{ background: {ACCENT_BG}; color: {ACCENT}; }}
 QMenu::item:checked {{ color: {ACCENT}; }}
 QMenu::separator {{ height: 1px; background: {BORDER}; margin: 4px 8px; }}
@@ -176,17 +199,21 @@ QSplitter::handle {{ background: {BG}; }}
 #OsdBar {{ background: rgba(10, 12, 14, 0.78); border-radius: 14px; }}
 #OsdTop {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(8,10,12,0.92), stop:0.6 rgba(8,10,12,0.7), stop:1 rgba(8,10,12,0)); }}
 #OsdBottom {{ background: qlineargradient(x1:0, y1:1, x2:0, y2:0, stop:0 rgba(8,10,12,0.96), stop:0.55 rgba(8,10,12,0.86), stop:1 rgba(8,10,12,0)); }}
-#OsdTitle {{ font-size: 18px; font-weight: 800; }}
-#OsdText {{ font-size: 13px; color: #c9d1d9; }}
+#OsdTitle {{ font-size: 19px; font-weight: 800; }}
+#OsdText {{ font-size: 14px; color: #c9d1d9; }}
 #OsdToast {{ background: rgba(10,12,14,0.85); border: 1px solid {ACCENT_LO}; border-radius: 12px; padding: 10px 18px; font-size: 15px; font-weight: 700; }}
 #Drawer {{ background: {SURFACE}; border-right: 1px solid {BORDER}; }}
-#RecBadge {{ background: {DANGER}; color: white; border-radius: 6px; padding: 2px 8px; font-weight: 800; font-size: 11px; }}
-#LiveBadge {{ background: {DANGER}; color: white; border-radius: 5px; padding: 1px 6px; font-weight: 800; font-size: 10px; }}
+#RecBadge {{ background: {DANGER}; color: white; border-radius: 6px; padding: 2px 8px; font-weight: 800; font-size: 12px; }}
+#LiveBadge {{ background: {DANGER}; color: white; border-radius: 5px; padding: 1px 6px; font-weight: 800; font-size: 11px; }}
 
 /* --- Ekran klavyesi --- */
 #Osk {{ background: {SURFACE}; border-top: 1px solid {BORDER}; }}
 QPushButton#Key {{ background: {SURFACE3}; border: none; border-radius: 7px; font-size: 16px; font-weight: 600; min-height: 38px; padding: 0; }}
 QPushButton#Key:pressed {{ background: {ACCENT}; color: #06201e; }}
-QPushButton#KeyAlt {{ background: {SURFACE2}; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; min-height: 38px; padding: 0 6px; color: {ACCENT}; }}
+QPushButton#KeyAlt {{ background: {SURFACE2}; border: none; border-radius: 7px; font-size: 14px; font-weight: 700; min-height: 38px; padding: 0 6px; color: {ACCENT}; }}
 QPushButton#KeyAlt:pressed {{ background: {ACCENT}; color: #06201e; }}
 """
+
+
+def qss():
+    return scaled(_QSS)

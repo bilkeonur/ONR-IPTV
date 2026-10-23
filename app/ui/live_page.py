@@ -1,16 +1,21 @@
 """Canlı TV: kategori çipleri, kanal listesi, önizleme oynatıcı ve yayın akışı (EPG / catch-up)."""
 import time
 
+from ..config import IS_WINDOWS
+from ..i18n import N_, _, day_name
 from ..library import ALL_CAT, FAV_CAT, RECENT_CAT
 from ..providers import LIVE
 from ..qt import (QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-                  QMenu, QProgressBar, QSize, QStackedWidget, Qt, QTimer, QVBoxLayout, QWidget, Signal)
+                  QMenu, QMessageBox, QProgressBar, QPushButton, QSize, QStackedWidget, Qt, QTimer, QVBoxLayout,
+                  QWidget, Signal)
 from ..tasks import run_async
 from . import theme
 from .icons import icon
-from .widgets import ChannelDelegate, ChipBar, ItemModel, ItemRole, ListView, SearchBox, StatusView, enable_kinetic
+from .widgets import (ChannelDelegate, ChipBar, ItemModel, ItemRole, LangFilterBox, ListView, SearchBox, StatusView,
+                      enable_kinetic)
 
-SORTS = [("default", "Varsayılan sıra"), ("num", "Kanal no"), ("az", "A → Z"), ("za", "Z → A"), ("new", "Yeni eklenen")]
+SORTS = [("default", N_("Varsayılan sıra")), ("num", N_("Kanal no")), ("az", "A → Z"), ("za", "Z → A"),
+         ("new", N_("Yeni eklenen"))]
 
 
 class AspectBox(QWidget):
@@ -23,7 +28,7 @@ class AspectBox(QWidget):
         self.setMinimumHeight(120)
         self.setStyleSheet(f"background:#000; border-radius:12px;")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        self.hint = QLabel("Bir kanal seçin", self)
+        self.hint = QLabel(_("Bir kanal seçin"), self)
         self.hint.setObjectName("Muted")
         self.hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -50,6 +55,8 @@ class AspectBox(QWidget):
 class LivePage(QWidget):
     playRequested = Signal(object, bool)       # kanal, tam ekran
     catchupRequested = Signal(object, dict)
+    guideRequested = Signal()
+    multiviewRequested = Signal(object)        # başlangıç kanalı ya da None
 
     def __init__(self, ctx, parent=None):
         super().__init__(parent)
@@ -59,6 +66,7 @@ class LivePage(QWidget):
         self.category = ALL_CAT
         self.query = ""
         self.sort = ctx.settings.get("live_sort", "default")
+        self.lang = ctx.settings.get("lang_filter", {}).get(LIVE, "")
         self.current = None
         self._epg_req = 0
 
@@ -67,20 +75,39 @@ class LivePage(QWidget):
         root.setSpacing(8)
 
         head = QHBoxLayout()
-        title = QLabel("Canlı TV")
+        title = QLabel(_("Canlı TV"))
         title.setObjectName("Title")
         head.addWidget(title)
         self.count = QLabel()
         self.count.setObjectName("Badge")
         head.addWidget(self.count)
         head.addStretch(1)
-        self.search = SearchBox("Kanal ara…")
-        self.search.setFixedWidth(230)
+        self.btn_clear = QPushButton("  " + _("Listeyi temizle"))
+        self.btn_clear.setIcon(icon("delete", theme.DANGER))
+        self.btn_clear.setObjectName("Danger")
+        self.btn_clear.clicked.connect(self._clear_recent)
+        self.btn_clear.hide()
+        head.addWidget(self.btn_clear)
+        self.btn_guide = QPushButton("  " + _("TV Rehberi"))
+        self.btn_guide.setIcon(icon("list"))
+        self.btn_guide.clicked.connect(self.guideRequested.emit)
+        head.addWidget(self.btn_guide)
+        self.btn_multi = QPushButton("  " + _("Çoklu ekran"))
+        self.btn_multi.setIcon(icon("grid"))
+        self.btn_multi.clicked.connect(lambda: self.multiviewRequested.emit(None))
+        self.btn_multi.setVisible(IS_WINDOWS)
+        head.addWidget(self.btn_multi)
+        self.lang_box = LangFilterBox()
+        self.lang_box.changedLang.connect(self._on_lang)
+        head.addWidget(self.lang_box)
+        self.search = SearchBox(_("Kanal ara…"))
+        self.search.setMinimumWidth(140)
+        self.search.setMaximumWidth(240)
         self.search.debounced.connect(self._on_search)
         head.addWidget(self.search)
         self.sort_box = QComboBox()
         for k, v in SORTS:
-            self.sort_box.addItem(v, k)
+            self.sort_box.addItem(_(v), k)
         self.sort_box.setCurrentIndex(max(0, [k for k, _ in SORTS].index(self.sort) if self.sort in dict(SORTS) else 0))
         self.sort_box.currentIndexChanged.connect(self._on_sort)
         head.addWidget(self.sort_box)
@@ -125,7 +152,7 @@ class LivePage(QWidget):
         self.ch_name = QLabel("—")
         self.ch_name.setObjectName("H2")
         r1.addWidget(self.ch_name, 1)
-        self.live_badge = QLabel("CANLI")
+        self.live_badge = QLabel(_("CANLI"))
         self.live_badge.setObjectName("LiveBadge")
         self.live_badge.hide()
         r1.addWidget(self.live_badge)
@@ -161,6 +188,14 @@ class LivePage(QWidget):
         self._tick.timeout.connect(self._refresh_info)
         self._tick.start()
 
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        # Dar ekranda (ör. Pi 1024x600) başlık düğmeleri yalnızca simge olur
+        wide = self.width() >= 1000
+        for b, text in ((self.btn_guide, _("TV Rehberi")), (self.btn_multi, _("Çoklu ekran"))):
+            b.setText("  " + text if wide else "")
+            b.setToolTip("" if wide else text)
+
     # ------------------------------------------------------------------
     def set_library(self, lib):
         self.lib = lib
@@ -177,7 +212,7 @@ class LivePage(QWidget):
         if lib.state[LIVE] == "ready":
             self._section_ready(LIVE)
         else:
-            self._section_loading(LIVE, "Kanallar yükleniyor…")
+            self._section_loading(LIVE, _("Kanallar yükleniyor…"))
 
     def _section_loading(self, s, msg):
         if s != LIVE:
@@ -195,22 +230,30 @@ class LivePage(QWidget):
     def _section_ready(self, s):
         if s != LIVE:
             return
-        cats = [(ALL_CAT, "Tümü", None), (FAV_CAT, "Favoriler", "star"), (RECENT_CAT, "Son izlenen", "history")]
+        cats = [(ALL_CAT, _("Tümü"), None), (FAV_CAT, _("Favoriler"), "star"), (RECENT_CAT, _("Son izlenen"), "history")]
         for c in self.lib.visible_categories(LIVE):
             cats.append((c.id, c.name, "lock" if self.lib.is_locked(LIVE, c) else None))
         self.chips.set_categories(cats, self.category)
         self.category = self.chips.current
+        self.lang = self.lang_box.set_languages(self.lib.languages(LIVE), self.lang)
+        self.apply()
+
+    def _on_lang(self, code):
+        self.lang = code
+        self.ctx.settings.data.setdefault("lang_filter", {})[LIVE] = code
+        self.ctx.settings.save()
         self.apply()
 
     def apply(self, keep_scroll=False):
         if not self.lib:
             return
-        items = self.lib.filtered(LIVE, self.category, self.query, self.sort, self.ctx.userdata)
+        items = self.lib.filtered(LIVE, self.category, self.query, self.sort, self.ctx.userdata, self.lang)
         sb = self.view.verticalScrollBar().value()
         self.model.set_items(items)
         if keep_scroll:
             self.view.verticalScrollBar().setValue(sb)
         self.count.setText(f"{len(items)}")
+        self.btn_clear.setVisible(self.category == RECENT_CAT and bool(items))
         if items:
             self.list_stack.setCurrentWidget(self.view)
             if self.current:
@@ -220,8 +263,8 @@ class LivePage(QWidget):
                     if not keep_scroll:
                         self.view.scrollTo(self.model.index(row), QAbstractItemView.ScrollHint.PositionAtCenter)
         else:
-            msg = {FAV_CAT: "Henüz favori kanal yok.\nKanal üzerinde sağ tık / uzun bas → Favori",
-                   RECENT_CAT: "Henüz izlenen kanal yok."}.get(self.category, "Kanal bulunamadı.")
+            msg = {FAV_CAT: _("Henüz favori kanal yok.\nKanal üzerinde sağ tık / uzun bas → Favori"),
+                   RECENT_CAT: _("Henüz izlenen kanal yok.")}.get(self.category, _("Kanal bulunamadı."))
             self.status.empty(msg, "live")
             self.list_stack.setCurrentWidget(self.status)
 
@@ -299,10 +342,11 @@ class LivePage(QWidget):
             desc = cur.get("desc") or ""
             if nxt:
                 desc = (desc[:140] + "  ") if desc else ""
-                desc += f"Sıradaki: {time.strftime('%H:%M', time.localtime(nxt['start']))} {nxt['title']}"
+                desc += _("Sıradaki: {time} {title}", time=time.strftime("%H:%M", time.localtime(nxt["start"])),
+                          title=nxt["title"])
             self.now_desc.setText(desc)
         else:
-            self.now_title.setText("Program bilgisi yok" if self.ctx.epg.programs(it, fetch=False) is not None else "")
+            self.now_title.setText(_("Program bilgisi yok") if self.ctx.epg.programs(it, fetch=False) is not None else "")
             self.now_bar.hide()
             self.now_desc.setText("")
         self.ctx.update_player_epg(it, cur, nxt)
@@ -326,7 +370,8 @@ class LivePage(QWidget):
         cur_row = -1
         last_day = None
         for p in progs:
-            day = time.strftime("%d.%m %A", time.localtime(p["start"]))
+            lt = time.localtime(p["start"])
+            day = time.strftime("%d.%m ", lt) + day_name(lt)
             if day != last_day:
                 last_day = day
                 h = QListWidgetItem(day)
@@ -349,12 +394,12 @@ class LivePage(QWidget):
                 cur_row = self.progs.count()
             elif p.get("archive") and it.archive:
                 li.setIcon(icon("catchup", theme.ACCENT, size=16))
-                li.setToolTip("Geçmiş yayını izle (catch-up)")
+                li.setToolTip(_("Geçmiş yayını izle (catch-up)"))
             elif p["end"] < now:
                 li.setForeground(self.palette().mid())
             self.progs.addItem(li)
         if not progs:
-            li = QListWidgetItem("Yayın akışı bulunamadı")
+            li = QListWidgetItem(_("Yayın akışı bulunamadı"))
             li.setFlags(Qt.ItemFlag.NoItemFlags)
             self.progs.addItem(li)
         if cur_row >= 0:
@@ -378,9 +423,14 @@ class LivePage(QWidget):
         fav = self.ctx.userdata.is_favorite(LIVE, it.id)
         m = QMenu(self)
         a_fav = m.addAction(icon("star" if not fav else "star_border"),
-                            "Favorilerden çıkar" if fav else "Favorilere ekle")
-        a_full = m.addAction(icon("fullscreen"), "Tam ekran izle")
-        a_prev = m.addAction(icon("play"), "Önizlemede oynat")
+                            _("Favorilerden çıkar") if fav else _("Favorilere ekle"))
+        a_full = m.addAction(icon("fullscreen"), _("Tam ekran izle"))
+        a_prev = m.addAction(icon("play"), _("Önizlemede oynat"))
+        a_rm = m.addAction(icon("delete", theme.DANGER), _("Son izlenenlerden kaldır")) \
+            if self.category == RECENT_CAT else None
+        a_multi = m.addAction(icon("grid"), _("Çoklu ekranda izle")) if IS_WINDOWS else None
+        locked = it.id in self.lib.lock_sets(LIVE)[1]
+        a_lock = m.addAction(icon("lock", theme.WARN), _("Kilidi kaldır") if locked else _("PIN ile kilitle"))
         act = m.exec(pos)
         if act is a_fav:
             self.ctx.userdata.toggle_favorite(LIVE, it.id, it.brief())
@@ -393,6 +443,20 @@ class LivePage(QWidget):
             self.playRequested.emit(it, True)
         elif act is a_prev:
             self.select(it, play=True)
+        elif a_rm is not None and act is a_rm:
+            self.ctx.userdata.remove_history(LIVE, it.id)
+            self.apply(keep_scroll=True)
+        elif a_multi is not None and act is a_multi:
+            self.multiviewRequested.emit(it)
+        elif act is a_lock:
+            self.ctx.win.toggle_lock(LIVE, it)
+            self.view.viewport().update()
+
+    def _clear_recent(self):
+        r = QMessageBox.question(self, _("Son izlenen"), _("Son izlenenler listesi temizlensin mi?"))
+        if r == QMessageBox.StandardButton.Yes:
+            self.ctx.userdata.clear_history(LIVE)
+            self.apply()
 
     def toggle_favorite_current(self):
         if self.current:

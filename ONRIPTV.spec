@@ -1,6 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Windows derlemesi:  pyinstaller --noconfirm ONRIPTV.spec
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
+# Chromecast: pychromecast ve zeroconf alt modülleri dinamik yüklenir
+HIDDEN = collect_submodules("pychromecast") + collect_submodules("zeroconf")
 
 EXCLUDES = [
     "PyQt5", "PyQt6", "PySide2", "tkinter", "unittest", "pydoc_data",
@@ -16,8 +20,8 @@ a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[("lib/libmpv-2.dll", "lib")],
-    datas=[("assets/icon.png", "assets")],
-    hiddenimports=[],
+    datas=[("assets/icon.png", "assets"), ("app/lang/*.json", "app/lang")],
+    hiddenimports=HIDDEN,
     excludes=EXCLUDES,
     noarchive=False,
 )

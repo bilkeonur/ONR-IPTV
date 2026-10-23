@@ -9,11 +9,13 @@ import uuid
 import requests
 
 from .config import DATA_DIR, atomic_write_json, read_json
+from .i18n import N_, _
 from .qt import QObject, Signal
 
 QUEUED, RUNNING, PAUSED, DONE, FAILED, RESOLVING = "queued", "running", "paused", "done", "failed", "resolving"
-STATUS_TEXT = {QUEUED: "Sırada", RUNNING: "İndiriliyor", PAUSED: "Duraklatıldı", DONE: "Tamamlandı",
-               FAILED: "Hata", RESOLVING: "Hazırlanıyor"}
+# Çeviri gösterim anında yapılır: _(STATUS_TEXT[durum])
+STATUS_TEXT = {QUEUED: N_("Sırada"), RUNNING: N_("İndiriliyor"), PAUSED: N_("Duraklatıldı"), DONE: N_("Tamamlandı"),
+               FAILED: N_("Hata"), RESOLVING: N_("Hazırlanıyor")}
 
 
 def usable_dir(settings, sub=""):
@@ -34,7 +36,7 @@ def usable_dir(settings, sub=""):
             return d
         except OSError:
             continue
-    raise RuntimeError("İndirme klasörü oluşturulamadı. Menü → İndirme bölümünden başka bir klasör seçin.")
+    raise RuntimeError(_("İndirme klasörü oluşturulamadı. Menü → İndirme bölümünden başka bir klasör seçin."))
 
 
 def safe_filename(name):
@@ -56,6 +58,7 @@ class DownloadManager(QObject):
             if t["status"] in (RUNNING, RESOLVING):
                 t["status"] = PAUSED
             t.setdefault("speed", 0)
+        self.tasks = [t for t in self.tasks if not self._missing(t)]
         self._threads = {}
         self._stop = {}
         self._lock = threading.Lock()
@@ -74,6 +77,21 @@ class DownloadManager(QObject):
             if t.get("key") == key:
                 return t
         return None
+
+    @staticmethod
+    def _missing(t):
+        return t["status"] == DONE and not os.path.exists(t["path"])
+
+    def prune_missing(self):
+        """Klasörden elle silinmiş tamamlanmış indirmeleri listeden kaldırır."""
+        gone = [t for t in self.tasks if self._missing(t)]
+        if not gone:
+            return False
+        for t in gone:
+            self.tasks.remove(t)
+        self._save(force=True)
+        self.listChanged.emit()
+        return True
 
     def add(self, title, key, resolver, ext="mp4", poster="", meta=None, folder=""):
         """resolver: arka planda çağrılıp indirme URL'sini döndüren fonksiyon."""
@@ -208,14 +226,14 @@ class DownloadManager(QObject):
             url = resolver()
             t["url"] = url
         if not url:
-            raise RuntimeError("İndirme bağlantısı alınamadı.")
+            raise RuntimeError(_("İndirme bağlantısı alınamadı."))
         if url.lower().split("?")[0].endswith((".m3u8", ".m3u")):
-            raise RuntimeError("Bu içerik akış (HLS) formatında, doğrudan indirilemiyor.")
+            raise RuntimeError(_("Bu içerik akış (HLS) formatında, doğrudan indirilemiyor."))
         try:
             os.makedirs(os.path.dirname(t["path"]), exist_ok=True)
         except OSError as e:
-            raise RuntimeError(f"Klasör oluşturulamadı ({os.path.dirname(t['path'])}). "
-                               "Menü → İndirme bölümünden başka bir klasör seçin.") from e
+            raise RuntimeError(_("Klasör oluşturulamadı ({path}). Menü → İndirme bölümünden başka bir klasör seçin.",
+                                 path=os.path.dirname(t["path"]))) from e
         part = t["path"] + ".part"
         have = os.path.getsize(part) if os.path.exists(part) else 0
         headers = {"User-Agent": self.settings.get("user_agent")}
@@ -231,7 +249,7 @@ class DownloadManager(QObject):
                 t["status"] = DONE
                 return
             if r.status_code not in (200, 206):
-                raise RuntimeError(f"Sunucu yanıtı HTTP {r.status_code} (bağlantı sınırı dolu olabilir)")
+                raise RuntimeError(_("Sunucu yanıtı HTTP {code} (bağlantı sınırı dolu olabilir)", code=r.status_code))
             if r.status_code == 200 and have:
                 have = 0  # sunucu devam etmeyi desteklemiyor, baştan
             length = int(r.headers.get("Content-Length") or 0)
@@ -239,7 +257,8 @@ class DownloadManager(QObject):
             t["total"] = total
             free = shutil.disk_usage(os.path.dirname(t["path"])).free
             if length and length > free - 200 * 1024 * 1024:
-                raise RuntimeError(f"Yetersiz disk alanı (gereken {length / 1e9:.1f} GB, boş {free / 1e9:.1f} GB)")
+                raise RuntimeError(_("Yetersiz disk alanı (gereken {need} GB, boş {free} GB)",
+                                     need=f"{length / 1e9:.1f}", free=f"{free / 1e9:.1f}"))
             mode = "ab" if have else "wb"
             done = have
             last_t, last_b = time.time(), done
@@ -261,7 +280,7 @@ class DownloadManager(QObject):
                         self._save()
             t["done"] = done
         if total and done < total:
-            raise RuntimeError("Bağlantı kesildi, devam ettirmek için tekrar başlatın.")
+            raise RuntimeError(_("Bağlantı kesildi, devam ettirmek için tekrar başlatın."))
         if os.path.exists(t["path"]):
             os.remove(t["path"])
         os.replace(part, t["path"])

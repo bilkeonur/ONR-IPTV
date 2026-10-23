@@ -6,6 +6,7 @@ import threading
 import time
 from urllib.parse import urlparse
 
+from ..i18n import _
 from .base import (EPISODE, LIVE, MOVIE, SERIES, Category, Item, Provider, ProviderError,
                    normalize_url, to_float, to_int, year_from)
 
@@ -91,20 +92,20 @@ class StalkerProvider(Provider):
         try:
             r = self.session.get(self.endpoint, params=params, headers=self._headers(), timeout=timeout)
         except Exception as e:  # noqa: BLE001
-            raise ProviderError(f"Portala bağlanılamadı: {e}") from e
+            raise ProviderError(_("Portala bağlanılamadı: {err}", err=e)) from e
         text = r.text.strip()
         if r.status_code >= 400 or not text:
             if retry and r.status_code in (401, 403, 200):
                 self._handshake()
                 return self._req(params, timeout, retry=False)
-            raise ProviderError(f"Portal hatası: HTTP {r.status_code}")
+            raise ProviderError(_("Portal hatası: HTTP {code}", code=r.status_code))
         try:
             js = r.json().get("js")
         except (ValueError, AttributeError):
             if retry:
                 self._handshake()
                 return self._req(params, timeout, retry=False)
-            raise ProviderError("Portaldan geçersiz yanıt.")
+            raise ProviderError(_("Portaldan geçersiz yanıt."))
         if js is None and retry and "Authorization failed" in text:
             self._handshake()
             return self._req(params, timeout, retry=False)
@@ -125,7 +126,7 @@ class StalkerProvider(Provider):
                 if js and js.get("token"):
                     break
             if not js or not js.get("token"):
-                raise ProviderError("Portal el sıkışması başarısız (MAC adresi yetkili mi?).")
+                raise ProviderError(_("Portal el sıkışması başarısız (MAC adresi yetkili mi?)."))
             self.token = js["token"]
             params = {
                 "type": "stb", "action": "get_profile", "hd": "1", "ver": "ImageDescription: 0.2.18-r23-250; "
@@ -144,7 +145,7 @@ class StalkerProvider(Provider):
 
     def authenticate(self):
         if not re.match(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$", self.mac):
-            raise ProviderError("MAC adresi geçersiz. Örnek: 00:1A:79:12:34:56")
+            raise ProviderError(_("MAC adresi geçersiz. Örnek: 00:1A:79:12:34:56"))
         last = None
         for ep in self._candidates():
             self.endpoint = ep
@@ -154,7 +155,7 @@ class StalkerProvider(Provider):
             except ProviderError as e:
                 last = e
         else:
-            raise last or ProviderError("Portal bulunamadı.")
+            raise last or ProviderError(_("Portal bulunamadı."))
         info = {"status": "Active", "expires": "-"}
         try:
             js = self._req({"type": "account_info", "action": "get_main_info"}, retry=False)
@@ -165,7 +166,7 @@ class StalkerProvider(Provider):
         pj = getattr(self, "profile_js", {}) or {}
         if pj.get("status") not in (None, 0, "0"):
             if pj.get("block_msg"):
-                raise ProviderError(f"Portal mesajı: {pj.get('block_msg')}")
+                raise ProviderError(_("Portal mesajı: {msg}", msg=pj.get("block_msg")))
         return info
 
     def _ensure_auth(self):
@@ -249,7 +250,7 @@ class StalkerProvider(Provider):
             out = []
             for e in eps:
                 en = to_int(e)
-                out.append(Item(EPISODE, f"{s.get('id')}:{en}", f"Bölüm {en}", item.logo, item.category_id,
+                out.append(Item(EPISODE, f"{s.get('id')}:{en}", _("Bölüm {n}", n=en), item.logo, item.category_id,
                                 en, "", "mp4", extra={"cmd": s.get("cmd", ""), "series_num": en,
                                                       "series_id": item.id, "series_name": item.name,
                                                       "season": snum, "episode": en}))
@@ -276,7 +277,7 @@ class StalkerProvider(Provider):
                         "forced_storage": "undefined", "disable_ad": "0", "download": "0"})
         url = _strip_cmd(js.get("cmd", "")) if isinstance(js, dict) else ""
         if not url:
-            raise ProviderError("Yayın bağlantısı alınamadı.")
+            raise ProviderError(_("Yayın bağlantısı alınamadı."))
         return url
 
     def short_epg(self, item):

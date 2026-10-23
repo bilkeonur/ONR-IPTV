@@ -2,7 +2,9 @@
 import os
 import shutil
 
+from .. import i18n
 from ..config import APP_AUTHOR, APP_NAME, APP_VERSION, IMAGE_CACHE_DIR
+from ..i18n import _
 from ..providers import LIVE, MOVIE, SERIES
 from ..qt import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog,
                   QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea, Qt,
@@ -32,14 +34,15 @@ def card(title, ic=None):
 
 
 class HiddenCategoriesDialog(QDialog):
-    def __init__(self, cats, hidden, parent=None):
+    def __init__(self, cats, hidden, parent=None, title=None, info=None):
         super().__init__(parent)
-        self.setWindowTitle("Kategorileri gizle")
+        self.setWindowTitle(title or _("Kategorileri gizle"))
         lay = QVBoxLayout(self)
-        info = QLabel("İşaretli kategoriler listelerde gösterilmez.")
+        info = QLabel(info or _("İşaretli kategoriler listelerde gösterilmez."))
+        info.setWordWrap(True)
         info.setObjectName("Muted")
         lay.addWidget(info)
-        self.search = SearchBox("Kategori ara…")
+        self.search = SearchBox(_("Kategori ara…"))
         lay.addWidget(self.search)
         self.lst = QListWidget()
         enable_kinetic(self.lst, True)
@@ -55,9 +58,9 @@ class HiddenCategoriesDialog(QDialog):
         lay.addWidget(self.lst, 1)
         row = QHBoxLayout()
         row.addStretch(1)
-        c = QPushButton("İptal")
+        c = QPushButton(_("İptal"))
         c.clicked.connect(self.reject)
-        ok = QPushButton("Kaydet")
+        ok = QPushButton(_("Kaydet"))
         ok.setObjectName("Primary")
         ok.clicked.connect(self.accept)
         row.addWidget(c)
@@ -93,7 +96,7 @@ class SettingsPage(QWidget):
         s = ctx.settings
         outer = QVBoxLayout(self)
         outer.setContentsMargins(14, 12, 14, 0)
-        t = QLabel("Menü")
+        t = QLabel(_("Menü"))
         t.setObjectName("Title")
         outer.addWidget(t)
         scroll = QScrollArea()
@@ -116,17 +119,17 @@ class SettingsPage(QWidget):
         self._two_cols = None
 
         # --- Profiller
-        f, v = card("Profiller", "person")
+        f, v = card(_("Profiller"), "person")
         self.profile_list = QListWidget()
         self.profile_list.setMinimumHeight(110)
         self.profile_list.setMaximumHeight(170)
         v.addWidget(self.profile_list)
         row = QHBoxLayout()
-        for label, ic, fn in (("Kullan", "check", self._use), ("Ekle", "add", self.profileAdd.emit),
-                              ("Düzenle", "edit", self._edit), ("Sil", "delete", self._delete)):
+        for label, ic, fn in ((_("Kullan"), "check", self._use), (_("Ekle"), "add", self.profileAdd.emit),
+                              (_("Düzenle"), "edit", self._edit), (_("Sil"), "delete", self._delete)):
             b = QPushButton(label)
             b.setIcon(icon(ic))
-            if label == "Sil":
+            if ic == "delete":
                 b.setObjectName("Danger")
             b.clicked.connect(fn)
             row.addWidget(b)
@@ -134,20 +137,21 @@ class SettingsPage(QWidget):
         self._lc.append(f)
 
         # --- Hesap
-        f, v = card("Hesap bilgisi", "info")
+        f, v = card(_("Hesap bilgisi"), "info")
         self.account = QLabel("—")
         self.account.setTextFormat(Qt.TextFormat.RichText)
         self.account.setWordWrap(True)
         v.addWidget(self.account)
         row = QHBoxLayout()
-        b = QPushButton("  Listeyi yenile")
+        b = QPushButton("  " + _("Listeyi yenile"))
         b.setIcon(icon("refresh"))
         b.setObjectName("Primary")
         b.clicked.connect(self.refreshRequested.emit)
         row.addWidget(b)
         self.cache_box = QComboBox()
-        for h, label in ((1, "1 saat"), (6, "6 saat"), (12, "12 saat"), (24, "24 saat"), (72, "3 gün")):
-            self.cache_box.addItem(f"Otomatik yenile: {label}", h)
+        for h, label in ((1, _("{n} saat", n=1)), (6, _("{n} saat", n=6)), (12, _("{n} saat", n=12)),
+                         (24, _("{n} saat", n=24)), (72, _("{n} gün", n=3))):
+            self.cache_box.addItem(_("Otomatik yenile: {period}", period=label), h)
         self._select(self.cache_box, s.get("cache_hours"))
         self.cache_box.currentIndexChanged.connect(lambda i: s.set("cache_hours", self.cache_box.itemData(i)))
         row.addWidget(self.cache_box, 1)
@@ -155,84 +159,116 @@ class SettingsPage(QWidget):
         self._lc.append(f)
 
         # --- Ebeveyn kontrolü
-        f, v = card("Ebeveyn kontrolü ve kategoriler", "lock")
+        f, v = card(_("Ebeveyn kontrolü ve kategoriler"), "lock")
         row = QHBoxLayout()
-        b = QPushButton("PIN belirle")
+        b = QPushButton(_("PIN belirle"))
         b.clicked.connect(self._set_pin)
         row.addWidget(b)
         self.pin_state = QLabel()
         self.pin_state.setObjectName("Muted")
         row.addWidget(self.pin_state, 1)
         v.addLayout(row)
-        self.chk_adult = QCheckBox("Yetişkin kategorilerini PIN ile kilitle")
+        self.chk_adult = QCheckBox(_("Yetişkin kategorilerini PIN ile kilitle"))
         self.chk_adult.setChecked(bool(s.get("lock_adult")))
         self.chk_adult.toggled.connect(self._lock_adult)
         v.addWidget(self.chk_adult)
         row = QHBoxLayout()
-        for label, sec in (("Canlı TV", LIVE), ("Filmler", MOVIE), ("Diziler", SERIES)):
+        for label, sec in ((_("Canlı TV"), LIVE), (_("Filmler"), MOVIE), (_("Diziler"), SERIES)):
             b = QPushButton(label)
             b.setIcon(icon("eye_off"))
             b.clicked.connect(lambda _=False, x=sec: self._hide_cats(x))
             row.addWidget(b)
-        v.addWidget(QLabel("Kategori gizle:"))
+        v.addWidget(QLabel(_("Kategori gizle:")))
         v.addLayout(row)
+        row = QHBoxLayout()
+        for label, sec in ((_("Canlı TV"), LIVE), (_("Filmler"), MOVIE), (_("Diziler"), SERIES)):
+            b = QPushButton(label)
+            b.setIcon(icon("lock", theme.WARN))
+            b.clicked.connect(lambda _=False, x=sec: self._lock_cats(x))
+            row.addWidget(b)
+        v.addWidget(QLabel(_("Kategori kilitle:")))
+        v.addLayout(row)
+        note = QLabel(_("Tek tek kanal, film veya dizi kilitlemek için üzerine sağ tıklayın / uzun basın. "
+                        "PIN girildikten sonra korumalı içerik 5 dakika açık kalır."))
+        note.setObjectName("Muted")
+        note.setWordWrap(True)
+        v.addWidget(note)
         self._lc.append(f)
 
         # --- Oynatıcı
-        f, v = card("Oynatıcı", "play")
+        f, v = card(_("Oynatıcı"), "play")
         form = QFormLayout()
         form.setVerticalSpacing(10)
         self.hw = QComboBox()
         from ..config import IS_ARM, PI_HWDEC  # noqa: PLC0415
-        hw_opts = [("auto-safe", "Otomatik (önerilen)")]
+        hw_opts = [("auto-safe", _("Otomatik (önerilen)"))]
         if IS_ARM:
-            hw_opts = [(PI_HWDEC, "Raspberry Pi donanım çözücü (önerilen)")]
-        for k, label in (*hw_opts, ("auto-copy", "Otomatik – kopya modu"),
-                         ("auto", "Otomatik – tüm yöntemler"), ("no", "Kapalı (yazılımsal)")):
+            hw_opts = [(PI_HWDEC, _("Raspberry Pi donanım çözücü (önerilen)"))]
+        for k, label in (*hw_opts, ("auto-copy", _("Otomatik – kopya modu")),
+                         ("auto", _("Otomatik – tüm yöntemler")), ("no", _("Kapalı (yazılımsal)"))):
             self.hw.addItem(label, k)
         self._select(self.hw, s.get("hwdec"))
         self.hw.currentIndexChanged.connect(self._hwdec)
-        form.addRow("Donanım hızlandırma", self.hw)
+        form.addRow(_("Donanım hızlandırma"), self.hw)
         self.buf = QComboBox()
         for sec in (2, 4, 8, 15, 30):
-            self.buf.addItem(f"{sec} saniye", sec)
+            self.buf.addItem(_("{n} saniye", n=sec), sec)
         self._select(self.buf, s.get("buffer_seconds"))
         self.buf.currentIndexChanged.connect(lambda i: self._restart_note("buffer_seconds", self.buf.itemData(i)))
-        form.addRow("Tampon (buffer)", self.buf)
+        form.addRow(_("Tampon (buffer)"), self.buf)
         self.fmt = QComboBox()
         self.fmt.addItem("MPEG-TS (.ts)", "ts")
         self.fmt.addItem("HLS (.m3u8)", "m3u8")
         self._select(self.fmt, s.get("live_format"))
         self.fmt.currentIndexChanged.connect(self._live_format)
-        form.addRow("Canlı yayın formatı", self.fmt)
+        form.addRow(_("Canlı yayın formatı"), self.fmt)
         self.quality = QComboBox()
-        for k, label in (("max", "En yüksek"), ("6000000", "En fazla 6 Mbit/s"), ("4000000", "En fazla 4 Mbit/s"),
-                         ("2000000", "En fazla 2 Mbit/s (yavaş internet)"), ("1000000", "En fazla 1 Mbit/s"),
-                         ("min", "En düşük")):
+        for k, label in (("max", _("En yüksek")), ("6000000", _("En fazla {n} Mbit/s", n=6)),
+                         ("4000000", _("En fazla {n} Mbit/s", n=4)),
+                         ("2000000", _("En fazla {n} Mbit/s", n=2) + " " + _("(yavaş internet)")),
+                         ("1000000", _("En fazla {n} Mbit/s", n=1)), ("min", _("En düşük"))):
             self.quality.addItem(label, k)
         self._select(self.quality, str(s.get("hls_bitrate")))
-        self.quality.setToolTip("Birden çok kalitesi olan (HLS) yayınlarda seçilecek en yüksek kalite. "
-                                "Yavaş internette takılmayı azaltır.")
+        self.quality.setToolTip(_("Birden çok kalitesi olan (HLS) yayınlarda seçilecek en yüksek kalite. "
+                                  "Yavaş internette takılmayı azaltır."))
         self.quality.currentIndexChanged.connect(self._quality)
-        form.addRow("Yayın kalitesi", self.quality)
+        form.addRow(_("Yayın kalitesi"), self.quality)
         self.ua = QLineEdit(s.get("user_agent"))
         self.ua.editingFinished.connect(lambda: s.set("user_agent", self.ua.text().strip() or "VLC/3.0.20 LibVLC/3.0.20"))
         form.addRow("User-Agent", self.ua)
         v.addLayout(form)
-        self.chk_recon = QCheckBox("Yayın koparsa otomatik yeniden bağlan")
+        self.chk_recon = QCheckBox(_("Yayın koparsa otomatik yeniden bağlan"))
         self.chk_recon.setChecked(bool(s.get("auto_reconnect")))
         self.chk_recon.toggled.connect(lambda c: s.set("auto_reconnect", c))
         v.addWidget(self.chk_recon)
         self._rc.append(f)
 
         # --- Görünüm
-        f, v = card("Görünüm ve kontrol", "tv")
-        for key, label in (("start_fullscreen", "Uygulamayı tam ekran başlat"),
-                           ("touch_scroll", "Parmakla/sürükleyerek kaydırma (dokunmatik)"),
-                           ("osk_enabled", "Ekran klavyesi (dokunmatik ekran için)"),
-                           ("show_epg_in_list", "Kanal listesinde yayın bilgisini göster"),
-                           ("animations", "Sayfa geçiş animasyonları"),
-                           ("sidebar_compact", "Dar kenar çubuğu (sadece ikonlar)")):
+        f, v = card(_("Görünüm ve kontrol"), "tv")
+        form = QFormLayout()
+        form.setVerticalSpacing(10)
+        self.lang = QComboBox()
+        self.lang.addItem(_("Otomatik (sistem dili)"), "auto")
+        for code, name in i18n.available():
+            self.lang.addItem(name, code)
+        self._select(self.lang, s.get("ui_language"))
+        self.lang.currentIndexChanged.connect(lambda i: self._needs_restart("ui_language", self.lang.itemData(i)))
+        form.addRow(_("Dil / Language"), self.lang)
+        self.font_box = QComboBox()
+        for k, label in (("small", _("Küçük")), ("normal", _("Normal")), ("large", _("Büyük")),
+                         ("xlarge", _("Çok büyük"))):
+            self.font_box.addItem(label, k)
+        self._select(self.font_box, s.get("font_scale"))
+        self.font_box.currentIndexChanged.connect(
+            lambda i: self._needs_restart("font_scale", self.font_box.itemData(i)))
+        form.addRow(_("Yazı boyutu"), self.font_box)
+        v.addLayout(form)
+        for key, label in (("start_fullscreen", _("Uygulamayı tam ekran başlat")),
+                           ("touch_scroll", _("Parmakla/sürükleyerek kaydırma (dokunmatik)")),
+                           ("osk_enabled", _("Ekran klavyesi (dokunmatik ekran için)")),
+                           ("show_epg_in_list", _("Kanal listesinde yayın bilgisini göster")),
+                           ("animations", _("Sayfa geçiş animasyonları")),
+                           ("sidebar_compact", _("Dar kenar çubuğu (sadece ikonlar)"))):
             c = QCheckBox(label)
             c.setChecked(bool(s.get(key)))
             c.toggled.connect(lambda val, k=key: self._toggle(k, val))
@@ -240,19 +276,19 @@ class SettingsPage(QWidget):
         self._rc.append(f)
 
         # --- İndirme
-        f, v = card("İndirme", "download")
+        f, v = card(_("İndirme"), "download")
         row = QHBoxLayout()
         self.dl_dir = QLabel(s.get("download_dir"))
         self.dl_dir.setObjectName("Muted")
         self.dl_dir.setWordWrap(True)
         row.addWidget(self.dl_dir, 1)
-        b = QPushButton("Değiştir")
+        b = QPushButton(_("Değiştir"))
         b.setIcon(icon("folder"))
         b.clicked.connect(self._pick_dir)
         row.addWidget(b)
         v.addLayout(row)
         row = QHBoxLayout()
-        row.addWidget(QLabel("Aynı anda indirme"))
+        row.addWidget(QLabel(_("Aynı anda indirme")))
         self.maxdl = QComboBox()
         for n in (1, 2, 3):
             self.maxdl.addItem(str(n), n)
@@ -261,28 +297,28 @@ class SettingsPage(QWidget):
         row.addWidget(self.maxdl)
         row.addStretch(1)
         v.addLayout(row)
-        note = QLabel("Not: Birçok IPTV hesabı tek bağlantıya izin verir; indirme sürerken izleme yapılamayabilir.")
+        note = QLabel(_("Not: Birçok IPTV hesabı tek bağlantıya izin verir; indirme sürerken izleme yapılamayabilir."))
         note.setObjectName("Muted")
         note.setWordWrap(True)
         v.addWidget(note)
         self._rc.append(f)
 
         # --- Hakkında
-        f, v = card("Hakkında", "info")
+        f, v = card(_("Hakkında"), "info")
         self.cache_lbl = QLabel()
         self.cache_lbl.setObjectName("Muted")
         about = QLabel(f"<span style='font-size:16px;font-weight:800;color:{theme.ACCENT}'>{APP_NAME}</span>"
-                       f"  <span style='color:{theme.MUTED}'>sürüm {APP_VERSION}</span><br>"
-                       f"Geliştirici: <b>{APP_AUTHOR}</b><br>"
+                       f"  <span style='color:{theme.MUTED}'>{_('sürüm')} {APP_VERSION}</span><br>"
+                       f"{_('Geliştirici:')} <b>{APP_AUTHOR}</b><br>"
                        f"<span style='color:{theme.MUTED}'>Xtream Codes · M3U · Stalker Portal</span>")
         about.setTextFormat(Qt.TextFormat.RichText)
         v.addWidget(about)
         v.addWidget(self.cache_lbl)
         row = QHBoxLayout()
-        b = QPushButton("Görsel önbelleğini temizle")
+        b = QPushButton(_("Görsel önbelleğini temizle"))
         b.clicked.connect(self._clear_images)
         row.addWidget(b)
-        q = QPushButton("  Çıkış")
+        q = QPushButton("  " + _("Çıkış"))
         q.setIcon(icon("power", theme.DANGER))
         q.setObjectName("Danger")
         q.clicked.connect(self.quitRequested.emit)
@@ -335,7 +371,7 @@ class SettingsPage(QWidget):
             self.profile_list.addItem(it)
             if active and p["id"] == active["id"]:
                 self.profile_list.setCurrentItem(it)
-        self.pin_state.setText("PIN tanımlı" if s.get("parental_pin") else "PIN tanımlı değil")
+        self.pin_state.setText(_("PIN tanımlı") if s.get("parental_pin") else _("PIN tanımlı değil"))
         self.set_account(self.ctx.library.account if self.ctx.library else None)
         self._cache_size()
 
@@ -347,15 +383,15 @@ class SettingsPage(QWidget):
         rows = [f"<b>{lib.profile.get('name')}</b>  <span style='color:{theme.MUTED}'>({lib.profile.get('type')})</span>"]
         if acc:
             if acc.get("status"):
-                rows.append(f"Durum: <span style='color:{theme.ACCENT}'>{acc['status']}</span>")
+                rows.append(f"{_('Durum:')} <span style='color:{theme.ACCENT}'>{acc['status']}</span>")
             if acc.get("expires"):
-                rows.append(f"Bitiş: {acc['expires']}")
+                rows.append(f"{_('Bitiş:')} {acc['expires']}")
             if acc.get("max_connections"):
-                rows.append(f"Bağlantı: {acc.get('active_connections', '?')} / {acc['max_connections']}")
+                rows.append(f"{_('Bağlantı:')} {acc.get('active_connections', '?')} / {acc['max_connections']}")
         counts = []
-        for sec, label in ((LIVE, "kanal"), (MOVIE, "film"), (SERIES, "dizi")):
+        for sec, label in ((LIVE, _("{n} kanal")), (MOVIE, _("{n} film")), (SERIES, _("{n} dizi"))):
             if lib.items[sec]:
-                counts.append(f"{len(lib.items[sec])} {label}")
+                counts.append(label.format(n=len(lib.items[sec])))
         if counts:
             rows.append(" · ".join(counts))
         self.account.setText("<br>".join(rows))
@@ -367,7 +403,7 @@ class SettingsPage(QWidget):
                 total += e.stat().st_size
         except OSError:
             pass
-        self.cache_lbl.setText(f"Görsel önbelleği: {total / 1e6:.0f} MB")
+        self.cache_lbl.setText(_("Görsel önbelleği: {n} MB", n=f"{total / 1e6:.0f}"))
 
     def _selected_pid(self):
         it = self.profile_list.currentItem()
@@ -386,13 +422,23 @@ class SettingsPage(QWidget):
     def _delete(self):
         pid = self._selected_pid()
         if pid:
-            r = QMessageBox.question(self, "Profili sil", "Seçili profil silinsin mi?")
+            r = QMessageBox.question(self, _("Profili sil"), _("Seçili profil silinsin mi?"))
             if r == QMessageBox.StandardButton.Yes:
                 self.profileDelete.emit(pid)
 
     def _toggle(self, key, val):
         self.ctx.settings.set(key, val)
         self.ctx.apply_setting(key)
+
+    def _needs_restart(self, key, val):
+        """Dil ve yazı boyutu tüm arayüzü etkiler; kaydedip yeniden başlatmayı önerir."""
+        if self.ctx.settings.get(key) == val:
+            return
+        self.ctx.settings.set(key, val)
+        r = QMessageBox.question(self, _("Yeniden başlat"),
+                                 _("Değişikliğin uygulanması için uygulama yeniden başlatılmalı. Şimdi yeniden başlatılsın mı?"))
+        if r == QMessageBox.StandardButton.Yes:
+            self.ctx.win.restart_app()
 
     def _hwdec(self, i):
         self.ctx.settings.set("hwdec", self.hw.itemData(i))
@@ -425,21 +471,21 @@ class SettingsPage(QWidget):
             pass
 
     def _pick_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "İndirme klasörü", self.ctx.settings.get("download_dir"))
+        d = QFileDialog.getExistingDirectory(self, _("İndirme klasörü"), self.ctx.settings.get("download_dir"))
         if d:
             self.ctx.settings.set("download_dir", d)
             self.dl_dir.setText(d)
 
     def _set_pin(self):
         s = self.ctx.settings
-        if s.get("parental_pin") and not self.ctx.ask_pin(self):
+        if s.get("parental_pin") and not self.ctx.ask_pin(self, force=True):
             return
-        pin, ok = QInputDialog.getText(self, "PIN", "Yeni 4 haneli PIN (boş bırakırsanız kaldırılır):",
+        pin, ok = QInputDialog.getText(self, "PIN", _("Yeni 4 haneli PIN (boş bırakırsanız kaldırılır):"),
                                        QLineEdit.EchoMode.Password)
         if ok:
             pin = pin.strip()
             if pin and (not pin.isdigit() or len(pin) < 4):
-                QMessageBox.warning(self, "PIN", "PIN en az 4 rakam olmalı.")
+                QMessageBox.warning(self, "PIN", _("PIN en az 4 rakam olmalı."))
                 return
             s.set("parental_pin", pin)
             self.refresh()
@@ -448,7 +494,7 @@ class SettingsPage(QWidget):
     def _lock_adult(self, val):
         s = self.ctx.settings
         if val and not s.get("parental_pin"):
-            QMessageBox.information(self, "PIN gerekli", "Önce bir PIN belirleyin.")
+            QMessageBox.information(self, _("PIN gerekli"), _("Önce bir PIN belirleyin."))
             self.chk_adult.setChecked(False)
             return
         if not val and s.get("lock_adult") and not self.ctx.ask_pin(self):
@@ -462,13 +508,30 @@ class SettingsPage(QWidget):
     def _hide_cats(self, section):
         lib = self.ctx.library
         if not lib or not lib.cats[section]:
-            QMessageBox.information(self, "Kategoriler", "Kategoriler henüz yüklenmedi.")
+            QMessageBox.information(self, _("Kategoriler"), _("Kategoriler henüz yüklenmedi."))
             return
         if self.ctx.settings.get("parental_pin") and not self.ctx.ask_pin(self):
             return
         dlg = HiddenCategoriesDialog(lib.cats[section], self.ctx.settings.hidden(lib.pid, section), self.window())
         if dlg.exec():
             self.ctx.settings.set_hidden(lib.pid, section, dlg.hidden_ids())
+            self.categoriesChanged.emit()
+
+    def _lock_cats(self, section):
+        lib = self.ctx.library
+        if not lib or not lib.cats[section]:
+            QMessageBox.information(self, _("Kategoriler"), _("Kategoriler henüz yüklenmedi."))
+            return
+        if not self.ctx.settings.get("parental_pin"):
+            QMessageBox.information(self, _("PIN gerekli"), _("Önce bir PIN belirleyin."))
+            return
+        if not self.ctx.ask_pin(self):
+            return
+        dlg = HiddenCategoriesDialog(lib.cats[section], lib.lock_sets(section)[0], self.window(),
+                                     title=_("Kategori kilitle"),
+                                     info=_("İşaretli kategorilerdeki içerik açılmadan önce PIN istenir."))
+        if dlg.exec():
+            lib.set_locked(section, "cats", dlg.hidden_ids())
             self.categoriesChanged.emit()
 
     def _clear_images(self):

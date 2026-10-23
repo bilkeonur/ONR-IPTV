@@ -1,4 +1,5 @@
 """İlk açılış / profil ekleme ekranı: Xtream, M3U ve Stalker."""
+from ..i18n import _
 from ..providers import ProviderError, create_provider, parse_xtream_m3u_link, random_mac
 from ..qt import (QButtonGroup, QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
                   QPushButton, QStackedWidget, Qt, QVBoxLayout, QWidget, Signal)
@@ -27,7 +28,7 @@ class ProfileForm(QWidget):
         seg.setSpacing(6)
         self.type_group = QButtonGroup(self)
         self.type_btns = {}
-        for key, label in (("xtream", "Xtream Codes"), ("m3u", "M3U Liste"), ("stalker", "Stalker Portal")):
+        for key, label in (("xtream", "Xtream Codes"), ("m3u", _("M3U Liste")), ("stalker", "Stalker Portal")):
             b = QPushButton(label)
             b.setObjectName("Chip")
             b.setCheckable(True)
@@ -40,7 +41,7 @@ class ProfileForm(QWidget):
         lay.addLayout(seg)
 
         self.name = QLineEdit(self.profile.get("name", ""))
-        self.name.setPlaceholderText("Örn: Ev IPTV")
+        self.name.setPlaceholderText(_("Örn: Ev IPTV"))
         self.stack = QStackedWidget()
 
         # Xtream
@@ -49,15 +50,15 @@ class ProfileForm(QWidget):
         xf.setContentsMargins(0, 0, 0, 0)
         xf.setVerticalSpacing(10)
         self.x_url = QLineEdit()
-        self.x_url.setPlaceholderText("http://sunucu.com:8080")
+        self.x_url.setPlaceholderText(_("http://sunucu.com:8080"))
         self.x_user = QLineEdit()
-        self.x_user.setPlaceholderText("Kullanıcı adı")
+        self.x_user.setPlaceholderText(_("Kullanıcı adı"))
         self.x_pass = QLineEdit()
-        self.x_pass.setPlaceholderText("Şifre")
+        self.x_pass.setPlaceholderText(_("Şifre"))
         self.x_pass.setEchoMode(QLineEdit.EchoMode.Password)
-        xf.addRow("Sunucu URL", self.x_url)
-        xf.addRow("Kullanıcı adı", self.x_user)
-        xf.addRow("Şifre", self.x_pass)
+        xf.addRow(_("Sunucu URL"), self.x_url)
+        xf.addRow(_("Kullanıcı adı"), self.x_user)
+        xf.addRow(_("Şifre"), self.x_pass)
         self.stack.addWidget(xw)
 
         # M3U
@@ -67,17 +68,17 @@ class ProfileForm(QWidget):
         mf.setVerticalSpacing(10)
         row = QHBoxLayout()
         self.m_url = QLineEdit()
-        self.m_url.setPlaceholderText("http://.../liste.m3u  veya dosya yolu")
-        pick = QPushButton("Dosya")
+        self.m_url.setPlaceholderText(_("http://.../liste.m3u  veya dosya yolu"))
+        pick = QPushButton(_("Dosya"))
         pick.setIcon(icon("folder"))
         pick.clicked.connect(self._pick_file)
         row.addWidget(self.m_url, 1)
         row.addWidget(pick)
         self.m_epg = QLineEdit()
-        self.m_epg.setPlaceholderText("İsteğe bağlı XMLTV EPG adresi")
+        self.m_epg.setPlaceholderText(_("İsteğe bağlı XMLTV EPG adresi"))
         mf.addRow("M3U URL", row)
         mf.addRow("EPG URL", self.m_epg)
-        hint = QLabel("İpucu: get.php?username=…&password=… biçimindeki linkler otomatik olarak Xtream'e çevrilir.")
+        hint = QLabel(_("İpucu: get.php?username=…&password=… biçimindeki linkler otomatik olarak Xtream'e çevrilir."))
         hint.setObjectName("Muted")
         hint.setWordWrap(True)
         mf.addRow("", hint)
@@ -93,17 +94,17 @@ class ProfileForm(QWidget):
         mrow = QHBoxLayout()
         self.s_mac = QLineEdit()
         self.s_mac.setPlaceholderText("00:1A:79:XX:XX:XX")
-        gen = QPushButton("Üret")
+        gen = QPushButton(_("Üret"))
         gen.clicked.connect(lambda: self.s_mac.setText(random_mac()))
         mrow.addWidget(self.s_mac, 1)
         mrow.addWidget(gen)
-        sf.addRow("Portal URL", self.s_url)
-        sf.addRow("MAC adresi", mrow)
+        sf.addRow(_("Portal URL"), self.s_url)
+        sf.addRow(_("MAC adresi"), mrow)
         self.stack.addWidget(sw)
 
         nf = QFormLayout()
         nf.setContentsMargins(0, 0, 0, 0)
-        nf.addRow("Profil adı", self.name)
+        nf.addRow(_("Profil adı"), self.name)
         lay.addLayout(nf)
         lay.addWidget(self.stack)
         # Tüm formlardaki etiketler aynı genişlikte olsun ki alanlar hizalı dursun
@@ -113,7 +114,7 @@ class ProfileForm(QWidget):
             for r in range(form.rowCount()):
                 li = form.itemAt(r, QFormLayout.ItemRole.LabelRole)
                 if li and li.widget():
-                    li.widget().setFixedWidth(110)
+                    li.widget().setFixedWidth(120)
 
         self.status = QLabel()
         self.status.setWordWrap(True)
@@ -128,10 +129,10 @@ class ProfileForm(QWidget):
         brow = QHBoxLayout()
         brow.addStretch(1)
         if show_cancel:
-            c = QPushButton("İptal")
+            c = QPushButton(_("İptal"))
             c.clicked.connect(self.cancelled.emit)
             brow.addWidget(c)
-        self.btn_ok = QPushButton("Bağlan ve Kaydet")
+        self.btn_ok = QPushButton(_("Bağlan ve Kaydet"))
         self.btn_ok.setObjectName("Primary")
         self.btn_ok.setMinimumHeight(40)
         self.btn_ok.setMinimumWidth(180)
@@ -165,7 +166,8 @@ class ProfileForm(QWidget):
         self.status.setText("")
 
     def _pick_file(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "M3U dosyası seç", "", "Çalma listesi (*.m3u *.m3u8);;Tümü (*)")
+        fn, _ = QFileDialog.getOpenFileName(self, _("M3U dosyası seç"), "",
+                                            _("Çalma listesi") + " (*.m3u *.m3u8);;" + _("Tümü") + " (*)")
         if fn:
             self.m_url.setText(fn)
 
@@ -175,11 +177,11 @@ class ProfileForm(QWidget):
             p.update(url=self.x_url.text().strip(), username=self.x_user.text().strip(),
                      password=self.x_pass.text().strip())
             if not (p["url"] and p["username"] and p["password"]):
-                raise ValueError("URL, kullanıcı adı ve şifre gerekli.")
+                raise ValueError(_("URL, kullanıcı adı ve şifre gerekli."))
         elif self.type == "m3u":
             url = self.m_url.text().strip()
             if not url:
-                raise ValueError("M3U adresi gerekli.")
+                raise ValueError(_("M3U adresi gerekli."))
             x = parse_xtream_m3u_link(url) if "get.php" in url else None
             if x:
                 p.update(type="xtream", url=x[0], username=x[1], password=x[2], m3u_fallback=url)
@@ -188,7 +190,7 @@ class ProfileForm(QWidget):
         else:
             p.update(url=self.s_url.text().strip(), mac=self.s_mac.text().strip().upper())
             if not (p["url"] and p["mac"]):
-                raise ValueError("Portal URL ve MAC adresi gerekli.")
+                raise ValueError(_("Portal URL ve MAC adresi gerekli."))
         p["name"] = self.name.text().strip() or {"xtream": "Xtream", "m3u": "M3U", "stalker": "Stalker"}[p["type"]]
         return p
 
@@ -202,7 +204,7 @@ class ProfileForm(QWidget):
         self.btn_ok.setEnabled(False)
         self.spinner.show()
         self.status.setStyleSheet("")
-        self.status.setText("Bağlantı test ediliyor…")
+        self.status.setText(_("Bağlantı test ediliyor…"))
         ua = self.settings.get("user_agent")
 
         def work():
@@ -224,14 +226,14 @@ class ProfileForm(QWidget):
         self.spinner.hide()
         self.btn_ok.setEnabled(True)
         self.status.setStyleSheet(f"color:{theme.ACCENT};")
-        self.status.setText("Bağlantı başarılı.")
+        self.status.setText(_("Bağlantı başarılı."))
         self.saved.emit(p)
 
     def _fail(self, e):
         self.spinner.hide()
         self.btn_ok.setEnabled(True)
         self.status.setStyleSheet(f"color:{theme.DANGER};")
-        self.status.setText(str(e) if isinstance(e, ProviderError) else f"Bağlantı hatası: {e}")
+        self.status.setText(str(e) if isinstance(e, ProviderError) else _("Bağlantı hatası: {err}", err=e))
 
 
 class WelcomePage(QWidget):
@@ -254,9 +256,9 @@ class WelcomePage(QWidget):
         cl.setSpacing(6)
         brand = QLabel("ONR<span style='color:#e6e9ec;font-weight:300'> IPTV</span>")
         brand.setObjectName("Brand")
-        brand.setStyleSheet("font-size:28px;")
+        brand.setStyleSheet(theme.scaled("font-size:28px;"))
         cl.addWidget(brand)
-        sub = QLabel("Başlamak için IP TV hesabınızı ekleyin. Bilgileriniz bu cihazda saklanır.")
+        sub = QLabel(_("Başlamak için IP TV hesabınızı ekleyin. Bilgileriniz bu cihazda saklanır."))
         sub.setObjectName("Muted")
         sub.setWordWrap(True)
         cl.addWidget(sub)
@@ -275,7 +277,7 @@ class WelcomePage(QWidget):
 class ProfileDialog(QDialog):
     def __init__(self, settings, profile=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Profil düzenle" if profile else "Yeni profil")
+        self.setWindowTitle(_("Profil düzenle") if profile else _("Yeni profil"))
         self.result_profile = None
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 16, 20, 16)

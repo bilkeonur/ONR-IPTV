@@ -6,6 +6,7 @@ import time
 import unicodedata
 
 from .config import LIST_CACHE_DIR, atomic_write_json
+from .i18n import _
 from .providers import LIVE, MOVIE, SECTIONS, SERIES, Category, Item, ProviderError, create_provider
 from .qt import QObject, QTimer, Signal
 from .tasks import run_async
@@ -15,6 +16,38 @@ RECENT_CAT = "__recent__"
 ALL_CAT = "__all__"
 
 ADULT_RE = re.compile(r"(xxx|adult|\+18|18\+|yetişkin|porn|erotik|for adults)", re.I)
+
+# İçerik dili: ad ya da kategori başındaki "TR:", "|DE|", "[EN]", "FR -", "AR ▎" gibi etiketler
+_LANG_TAG_RE = re.compile(r"^\s*[\[\(|]?\s*([A-Za-z]{2,3})\s*(?:[\]\)|:▎┃•\-–]|\s\|)")
+_LANG_CODES = {"TR", "EN", "UK", "US", "GB", "DE", "FR", "IT", "ES", "NL", "AR", "PT", "PL", "RU", "AL", "GR",
+               "RO", "BG", "SE", "NO", "DK", "FI", "IN", "PK", "IR", "KU", "AZ", "BE", "CH", "AT", "HU", "CZ",
+               "SK", "HR", "RS", "BA", "MK", "SI", "UA", "IL", "JP", "KR", "CN", "BR", "MX", "LAT", "CA", "AU",
+               "IE", "AF", "EX", "KZ", "GE", "AM", "LB", "SY", "IQ", "EG", "MA", "DZ", "TN", "SA", "AE", "QA"}
+_LANG_ALIAS = {"UK": "EN", "US": "EN", "GB": "EN", "AU": "EN", "IE": "EN", "CA": "EN", "AT": "DE", "CH": "DE",
+               "BE": "FR", "BR": "PT", "MX": "ES", "LAT": "ES"}
+_LANG_WORDS = [(re.compile(r"\b(t[uü]rk|turkish|turkiye|türkiye)", re.I), "TR"),
+               (re.compile(r"\b(english|ingilizce)\b", re.I), "EN"),
+               (re.compile(r"\b(german|deutsch|almanca)\b", re.I), "DE"),
+               (re.compile(r"\b(french|fran[cç]ais|frans[ıi]zca)\b", re.I), "FR"),
+               (re.compile(r"\b(arabic|arap[cç]a)\b", re.I), "AR"),
+               (re.compile(r"\b(spanish|espa[nñ]ol)\b", re.I), "ES"),
+               (re.compile(r"\b(italian|italiano)\b", re.I), "IT")]
+
+
+def lang_tag(name):
+    """Addan içerik dili kodu (ör. 'TR'); bulunamazsa ''."""
+    if not name:
+        return ""
+    m = _LANG_TAG_RE.match(name)
+    if m:
+        code = m.group(1).upper()
+        if code in _LANG_CODES:
+            return _LANG_ALIAS.get(code, code)
+    for rx, code in _LANG_WORDS:
+        if rx.search(name):
+            return code
+    return ""
+
 
 _TR_MAP = str.maketrans({"ı": "i", "İ": "i", "ş": "s", "Ş": "s", "ğ": "g", "Ğ": "g",
                          "ü": "u", "Ü": "u", "ö": "o", "Ö": "o", "ç": "c", "Ç": "c"})
@@ -76,6 +109,9 @@ class Library(QObject):
         self.account = None
         self._page_cache = {}  # (bölüm, kategori) -> {"items": [], "pages": n, "loaded": k}
         self._req_no = 0
+        self.cat_by_id = {s: {} for s in SECTIONS}
+        self._lang = {s: {} for s in SECTIONS}   # öğe id -> dil kodu
+        self._locks = {}                          # bölüm -> (kilitli kategoriler, kilitli öğeler)
         self.cache_path = os.path.join(LIST_CACHE_DIR, f"{profile['id']}.json")
         self._cache_timer = QTimer(self)
         self._cache_timer.setSingleShot(True)
@@ -94,7 +130,7 @@ class Library(QObject):
         """Önbelleği arka planda okur (arayüz donmaz), eskiyse sunucudan yeniler."""
         for s in SECTIONS:
             self.state[s] = "loading"
-            self.section_loading.emit(s, "Liste yükleniyor…")
+            self.section_loading.emit(s, _("Liste yükleniyor…"))
         if force:
             self._after_cache(None)
             return
@@ -152,7 +188,7 @@ class Library(QObject):
                 self.load_section(s, silent=silent)
 
         def fail(e):
-            msg = str(e) if isinstance(e, ProviderError) else f"Bağlantı hatası: {e}"
+            msg = str(e) if isinstance(e, ProviderError) else _("Bağlantı hatası: {err}", err=e)
             for s in SECTIONS:
                 if self.state[s] != "ready":
                     self.state[s] = "error"
@@ -162,13 +198,13 @@ class Library(QObject):
         for s in SECTIONS:
             if not silent or self.state[s] != "ready":
                 self.state[s] = "loading"
-                self.section_loading.emit(s, "Sunucuya bağlanılıyor…")
+                self.section_loading.emit(s, _("Sunucuya bağlanılıyor…"))
         run_async(work, on_done=done, on_error=fail)
 
     def load_section(self, section, silent=False):
         if not silent or self.state[section] != "ready":
             self.state[section] = "loading"
-            self.section_loading.emit(section, "Liste yükleniyor…")
+            self.section_loading.emit(section, _("Liste yükleniyor…"))
         paged = self.is_paged(section)
 
         def work():
@@ -196,6 +232,8 @@ class Library(QObject):
         self.cats[section] = cats
         self.items[section] = items
         self.by_id[section] = {i.id: i for i in items}
+        self.cat_by_id[section] = {c.id: c for c in cats}
+        self._lang[section] = {}
         self.state[section] = "ready"
         self.section_ready.emit(section)
 
@@ -229,11 +267,75 @@ class Library(QObject):
         hidden = self.settings.hidden(self.pid, section)
         return [c for c in self.cats[section] if c.id not in hidden]
 
-    def is_locked(self, section, cat):
-        return bool(self.settings.get("lock_adult") and self.settings.get("parental_pin")
-                    and ADULT_RE.search(cat.name or ""))
+    # --- Ebeveyn kilidi ---------------------------------------------
+    def pin_set(self):
+        return bool(self.settings.get("parental_pin"))
 
-    def filtered(self, section, category_id, query="", sort="default", userdata=None):
+    def lock_sets(self, section):
+        ls = self._locks.get(section)
+        if ls is None:
+            ls = self._locks[section] = (self.settings.locked(self.pid, section, "cats"),
+                                         self.settings.locked(self.pid, section, "items"))
+        return ls
+
+    def locks_changed(self):
+        self._locks.clear()
+
+    def set_locked(self, section, what, ids):
+        self.settings.set_locked(self.pid, section, what, ids)
+        self.locks_changed()
+
+    def toggle_item_lock(self, section, item_id):
+        cats, items = self.lock_sets(section)
+        items = set(items)
+        locked = item_id not in items
+        (items.add if locked else items.discard)(item_id)
+        self.set_locked(section, "items", items)
+        return locked
+
+    def is_locked(self, section, cat):
+        """Kategori PIN korumalı mı (yetişkin kilidi ya da elle kilitlenmiş)."""
+        if not self.pin_set():
+            return False
+        if cat.id in self.lock_sets(section)[0]:
+            return True
+        return bool(self.settings.get("lock_adult") and ADULT_RE.search(cat.name or ""))
+
+    def item_locked(self, section, item):
+        """Öğe kendisi ya da kategorisi kilitli mi."""
+        if item is None or not self.pin_set():
+            return False
+        cats, items = self.lock_sets(section)
+        if item.id in items or item.category_id in cats:
+            return True
+        cat = self.cat_by_id[section].get(item.category_id)
+        return bool(cat and self.settings.get("lock_adult") and ADULT_RE.search(cat.name or ""))
+
+    # --- İçerik dili --------------------------------------------------
+    def lang_of(self, section, item):
+        cache = self._lang[section]
+        code = cache.get(item.id)
+        if code is None:
+            code = lang_tag(item.name)
+            if not code:
+                cat = self.cat_by_id[section].get(item.category_id)
+                code = lang_tag(cat.name) if cat else ""
+            cache[item.id] = code
+        return code
+
+    def languages(self, section, items=None):
+        """[(kod, adet)] — en çok içeriği olan dil önce; tek dil varsa filtre anlamsızdır."""
+        counts = {}
+        for it in (self.items[section] if items is None else items):
+            c = self.lang_of(section, it)
+            if c:
+                counts[c] = counts.get(c, 0) + 1
+        return sorted(counts.items(), key=lambda kv: -kv[1])
+
+    def filter_lang(self, section, items, lang):
+        return [i for i in items if self.lang_of(section, i) == lang] if lang else items
+
+    def filtered(self, section, category_id, query="", sort="default", userdata=None, lang=""):
         """Bellekteki tam listeden filtreleme (sayfalı olmayan bölümler)."""
         src = self.items[section]
         if category_id == FAV_CAT and userdata:
@@ -258,10 +360,28 @@ class Library(QObject):
             excl = hidden | locked
             if excl:
                 src = [i for i in src if i.category_id not in excl]
+        if lang and category_id not in (FAV_CAT, RECENT_CAT):
+            src = self.filter_lang(section, src, lang)
         if query:
             q = fold(query)
             src = [i for i in src if q in folded(i)]
         return sort_items(src, sort)
+
+    def search(self, section, query, limit=60):
+        """Genel arama: bölümdeki (sayfalı bölümlerde yüklenmiş) tüm öğeler, gizli/yetişkin kategoriler hariç."""
+        q = fold(query)
+        if not q:
+            return []
+        src = self.items[section] or list(self.by_id[section].values())
+        hidden = self.settings.hidden(self.pid, section)
+        out = []
+        for i in src:
+            if i.category_id in hidden or q not in folded(i):
+                continue
+            out.append(i)
+        # Ada göre: başta eşleşenler önce
+        out.sort(key=lambda i: (not folded(i).startswith(q), len(i.name)))
+        return out[:limit]
 
     def request_page(self, section, category_id, page=1):
         """Sayfalı bölümler için kategori sayfası ister; sonuç page_ready ile gelir."""

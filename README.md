@@ -41,15 +41,30 @@ loaded from that account on every start.
 
 ### Features
 
-- **Live TV**: provider categories, favourites, recently watched, search, sorting, preview player,
-  "now playing" in the channel list, daily EPG, catch-up for archived programmes (Xtream).
+- **Live TV**: provider categories, favourites, recently watched (with remove / clear), search, sorting,
+  preview player with its own play/pause and volume controls, "now playing" in the channel list,
+  daily EPG, catch-up for archived programmes (Xtream).
+- **TV Guide**: a full EPG grid of all channels on a timeline. Tap a programme on air to watch it, a past
+  one to play the archive, or a future one for details.
+- **Multi-view (Windows)**: watch up to 4 live channels at once, pick which one plays sound, enlarge one or
+  drag to rearrange. The number of tiles follows the connection limit your provider reports.
+- **Chromecast**: cast live channels, movies, series and downloaded files to a Chromecast / Google TV
+  (via [pychromecast](https://github.com/home-assistant-libs/pychromecast)).
+- **Global search** across channels, movies and series at once.
+- **Content language filter**: languages are detected from tags such as `TR |`, `[DE]`, `UK:` in category
+  and channel names.
 - **Player**: libmpv with hardware decoding, overlay controls, channel up/down, audio track and subtitle
   selection, aspect ratio, playback speed, live recording, automatic reconnect, HLS quality limit.
 - **Movies and series**: poster grid, detail pages, seasons and episodes, resume where you left off,
-  automatic next episode.
-- **Downloads**: movies and episodes with pause/resume (HTTP Range), concurrent download limit, disk space
-  check, offline playback.
-- **Multiple profiles**, parental PIN, hiding categories, on-screen keyboard, compact sidebar.
+  automatic next episode, favourites from the player's star button.
+- **Downloads**: movies and episodes with pause/resume (HTTP Range), live progress on the episode list,
+  resume playback, watched / partly watched marks, files deleted from the folder disappear from the list.
+- **Parental control**: lock single channels, movies, series or whole categories with a 4-digit PIN; after
+  entering the PIN, protected content stays unlocked for 5 minutes.
+- **Languages**: Turkish and English. The system language is used by default (Turkish if Windows is
+  Turkish, otherwise English). Translations live in `app/lang/*.json`, so new languages can be added
+  without code changes.
+- **Multiple profiles**, adjustable text size, hiding categories, on-screen keyboard, compact sidebar.
 - **Fast**: lists are cached on disk and open instantly, all network work runs in the background, and lists
   with tens of thousands of items scroll smoothly.
 
@@ -120,7 +135,10 @@ app/providers/          Xtream, M3U (+XMLTV) and Stalker clients behind a common
 app/images.py           background image loader with disk and memory cache
 app/epg.py              lazy "now / next" EPG service
 app/downloads.py        download manager
-app/ui/                 Qt user interface (pages, player, theme, icons)
+app/cast.py             Chromecast discovery / casting and a small LAN file server
+app/i18n.py             UI languages; translations in app/lang/<code>.json
+app/ui/                 Qt user interface (pages, player, guide, search, multi-view, theme, icons)
+tools/i18n_extract.py   collects translatable strings and reports missing translations
 install_pi.sh           Raspberry Pi installer
 ONRIPTV.spec            PyInstaller build definition
 ```
@@ -137,11 +155,18 @@ Xtream, M3U ya da Stalker hesabınızı eklersiniz, liste her açılışta bu he
 
 | Bölüm | Neler var |
 |---|---|
-| **Canlı TV** | Servisten gelen kategoriler, Favoriler, Son izlenenler, arama, sıralama, önizleme oynatıcı, listede "şu an yayında" bilgisi, günlük yayın akışı (EPG), arşivli kanallarda geçmiş yayını izleme (catch-up, Xtream) |
-| **Oynatıcı** | Donanım hızlandırmalı libmpv, video üstü kontroller, kanal yukarı/aşağı, video üstünde kanal listesi, ses dili ve altyazı, görüntü oranı, hız, canlı yayın kaydı, otomatik yeniden bağlanma, yayın kalitesi sınırı |
+| **Canlı TV** | Servisten gelen kategoriler, Favoriler, Son izlenenler (tek tek silme / temizleme), arama, sıralama, kendi oynat/duraklat ve ses kontrolleri olan önizleme oynatıcı, listede "şu an yayında" bilgisi, günlük yayın akışı (EPG), arşivli kanallarda geçmiş yayını izleme (catch-up, Xtream) |
+| **TV Rehberi** | Tüm kanalların saat çizelgesinde yayın akışı. Yayındaki programa dokununca kanal açılır, geçmiş programda arşiv oynar, ileri tarihlide ayrıntı gösterilir |
+| **Çoklu ekran (Windows)** | Aynı anda 4 canlı kanala kadar; sesi verecek kanalı seçme, birini büyütme, sürükleyerek yer değiştirme. Kanal sayısı sağlayıcının izin verdiği bağlantı sayısına göre ayarlanır |
+| **Chromecast** | Canlı yayın, film, dizi ve indirilen dosyaları Chromecast / Google TV'ye gönderme ([pychromecast](https://github.com/home-assistant-libs/pychromecast)) |
+| **Genel arama** | Kanal, film ve dizilerde tek seferde arama |
+| **İçerik dili filtresi** | Kategori ve kanal adlarındaki `TR \|`, `[DE]`, `UK:` gibi etiketlerden dil otomatik algılanır |
+| **Oynatıcı** | Donanım hızlandırmalı libmpv, video üstü kontroller, kanal yukarı/aşağı, video üstünde kanal listesi, ses dili ve altyazı, görüntü oranı, hız, canlı yayın kaydı, otomatik yeniden bağlanma, yayın kalitesi sınırı, yıldız düğmesiyle favoriye ekleme |
 | **Filmler / Diziler** | Poster ızgarası, detay ekranı, sezon ve bölüm listesi, kaldığın yerden devam, sonraki bölüme otomatik geçiş, favoriler |
-| **İndirilenler** | Film ve bölüm indirme, duraklatıp kaldığı yerden devam, eşzamanlı indirme sınırı, disk alanı kontrolü, internetsiz oynatma |
-| **Menü** | Birden fazla profil, hesap bilgisi (bitiş tarihi, bağlantı sayısı), donanım hızlandırma, tampon, TS/HLS, yayın kalitesi, PIN ile ebeveyn kilidi, kategori gizleme, ekran klavyesi, indirme klasörü |
+| **İndirilenler** | Film ve bölüm indirme, duraklatıp kaldığı yerden devam, bölüm listesinde anlık ✓ işareti, indirilen içerikte kaldığı yerden oynatma, izlendi / yarım kaldı işareti, klasörden silinen dosyalar listeden kalkar, disk alanı kontrolü |
+| **Ebeveyn denetimi** | Kanal, film, dizi ya da kategori bazında 4 haneli PIN ile kilit; PIN girilince korumalı içerik 5 dakika açık kalır |
+| **Dil** | Türkçe ve İngilizce. Varsayılan sistem dilidir (Windows Türkçe ise Türkçe, değilse İngilizce). Çeviriler `app/lang/*.json` dosyalarındadır, kod değiştirmeden yeni dil eklenebilir |
+| **Menü** | Birden fazla profil, hesap bilgisi (bitiş tarihi, bağlantı sayısı), yazı boyutu, donanım hızlandırma, tampon, TS/HLS, yayın kalitesi, kategori gizleme, ekran klavyesi, indirme klasörü |
 
 Listeler diskte önbelleğe alınır, sonraki açılışlar anında yüklenir. Tüm ağ işlemleri arka planda
 çalıştığı için arayüz donmaz.
@@ -226,6 +251,11 @@ Dokunmatik ekranda videoya dokununca kontroller açılır ya da kapanır. Listel
 
 - Birçok IPTV hesabı tek bağlantıya izin verir. İndirme sürerken aynı anda izleme yapılamayabilir.
 - HLS (`.m3u8`) olarak sunulan filmler doğrudan indirilemez, sadece izlenebilir.
+- Chromecast yayını kendisi açar; sağlayıcıya özel User-Agent / Referer başlıkları gönderilemediği için bazı
+  sağlayıcılarda TV'de açılmayabilir. İndirilen dosyalar yerel ağdan paylaşılır, ilk seferde Windows Güvenlik
+  Duvarı izin isteyebilir.
+- Yeni dil eklemek için `app/lang/tr.json` dosyasını kopyalayıp değerleri çevirin ve `app/lang/` ya da
+  `%APPDATA%\ONRIPTV\lang` klasörüne koyun.
 - Hesap bilgileri cihazda düz metin olarak saklanır.
 
 ---

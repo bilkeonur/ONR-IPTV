@@ -8,7 +8,7 @@ import uuid
 
 APP_NAME = "ONR IPTV"
 APP_ID = "ONRIPTV"          # klasör ve dosya adlarında kullanılan boşluksuz ad
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 APP_AUTHOR = "Onur BiLKE"
 _OLD_ID = "TurkuazTV"       # önceki sürümün klasör adı (otomatik taşınır)
 
@@ -113,6 +113,10 @@ DEFAULTS = {
     "vod_sort": "default",
     "series_sort": "default",
     "sidebar_compact": False,
+    "ui_language": "auto",  # auto = sistem dili (Türkçe değilse İngilizce) | tr | en | ...
+    "locks": {},  # profil_id -> {bölüm: {"cats": [kategori_id], "items": [öğe_id]}} (ebeveyn kilidi)
+    "lang_filter": {},  # bölüm -> dil kodu (içerik dili filtresi)
+    "font_scale": "normal",  # small | normal | large | xlarge
 }
 
 
@@ -180,6 +184,16 @@ class Settings:
         hc.setdefault(pid, {})[section] = sorted(ids)
         self.save()
 
+    # --- Ebeveyn kilidi -----------------------------------------------
+    def locked(self, pid, section, what):
+        """what: 'cats' | 'items'"""
+        return set(self.data.setdefault("locks", {}).get(pid, {}).get(section, {}).get(what, []))
+
+    def set_locked(self, pid, section, what, ids):
+        lk = self.data.setdefault("locks", {})
+        lk.setdefault(pid, {}).setdefault(section, {})[what] = sorted(ids)
+        self.save()
+
 
 class UserData:
     """Profil başına favoriler, son izlenenler ve kaldığı yer bilgisi."""
@@ -193,6 +207,7 @@ class UserData:
         self.history = d.get("history", [])
         self.progress = d.get("progress", {})
         self.fav_meta = d.get("fav_meta", {})
+        self.watched = d.get("watched", {})  # izleme anahtarı -> sonuna kadar izlendiği zaman
         self._fav_sets = {k: set(v) for k, v in self.favorites.items()}
         self._dirty = False
         self._last_save = 0
@@ -232,6 +247,14 @@ class UserData:
         del self.history[self.MAX_HISTORY:]
         self.save()
 
+    def remove_history(self, kind, item_id):
+        self.history = [h for h in self.history if not (h.get("kind") == kind and h.get("id") == item_id)]
+        self.save()
+
+    def clear_history(self, kind):
+        self.history = [h for h in self.history if h.get("kind") != kind]
+        self.save()
+
     def history_ids(self, kind):
         return [h["id"] for h in self.history if h.get("kind") == kind]
 
@@ -242,9 +265,15 @@ class UserData:
     def get_progress(self, key):
         return self.progress.get(key)
 
+    def is_watched(self, key):
+        return key in self.watched
+
     def set_progress(self, key, pos, dur, flush=False):
         if dur and pos / dur > 0.95:
             self.progress.pop(key, None)
+            if key not in self.watched:
+                self.watched[key] = int(time.time())
+                flush = True
         else:
             self.progress[key] = {"pos": int(pos), "dur": int(dur or 0), "ts": int(time.time())}
         self._dirty = True
@@ -260,4 +289,5 @@ class UserData:
             "fav_meta": self.fav_meta,
             "history": self.history,
             "progress": self.progress,
+            "watched": self.watched,
         })
