@@ -81,13 +81,23 @@ class LivePage(QWidget):
         self.count = QLabel()
         self.count.setObjectName("Badge")
         head.addWidget(self.count)
-        head.addStretch(1)
+        head.addSpacing(14)
+        # Arama kutusu başlığın yanında, boş alanı doldurarak uzun durur; dil ve diğerleri sağda
+        self.search = SearchBox(_("Kanal ara…"))
+        self.search.setMinimumWidth(180)
+        self.search.setMaximumWidth(520)
+        self.search.debounced.connect(self._on_search)
+        head.addWidget(self.search, 1)
+        head.addStretch(0)  # arama kutusu en fazla genişliğe ulaşınca kalan boşluk buraya
         self.btn_clear = QPushButton("  " + _("Listeyi temizle"))
         self.btn_clear.setIcon(icon("delete", theme.DANGER))
         self.btn_clear.setObjectName("Danger")
         self.btn_clear.clicked.connect(self._clear_recent)
         self.btn_clear.hide()
         head.addWidget(self.btn_clear)
+        self.lang_box = LangFilterBox()
+        self.lang_box.changedLang.connect(self._on_lang)
+        head.addWidget(self.lang_box)
         self.btn_guide = QPushButton("  " + _("TV Rehberi"))
         self.btn_guide.setIcon(icon("list"))
         self.btn_guide.clicked.connect(self.guideRequested.emit)
@@ -97,14 +107,6 @@ class LivePage(QWidget):
         self.btn_multi.clicked.connect(lambda: self.multiviewRequested.emit(None))
         self.btn_multi.setVisible(IS_WINDOWS)
         head.addWidget(self.btn_multi)
-        self.lang_box = LangFilterBox()
-        self.lang_box.changedLang.connect(self._on_lang)
-        head.addWidget(self.lang_box)
-        self.search = SearchBox(_("Kanal ara…"))
-        self.search.setMinimumWidth(140)
-        self.search.setMaximumWidth(240)
-        self.search.debounced.connect(self._on_search)
-        head.addWidget(self.search)
         self.sort_box = QComboBox()
         for k, v in SORTS:
             self.sort_box.addItem(_(v), k)
@@ -191,7 +193,7 @@ class LivePage(QWidget):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         # Dar ekranda (ör. Pi 1024x600) başlık düğmeleri yalnızca simge olur
-        wide = self.width() >= 1000
+        wide = self.width() >= 1100
         for b, text in ((self.btn_guide, _("TV Rehberi")), (self.btn_multi, _("Çoklu ekran"))):
             b.setText("  " + text if wide else "")
             b.setToolTip("" if wide else text)

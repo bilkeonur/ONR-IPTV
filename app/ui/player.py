@@ -638,6 +638,8 @@ class PlayerWidget(QWidget):
         return w is None or w is self.surface
 
     def mousePressEvent(self, e):
+        if self.mode == "full":
+            self.setFocus()  # Boşluk ve diğer kısayollar oynatıcıya gelsin
         if e.button() == Qt.MouseButton.LeftButton and self._on_video(e.position().toPoint()):
             self._click_timer.start()
         super().mousePressEvent(e)
@@ -659,9 +661,9 @@ class PlayerWidget(QWidget):
         elif self.mode == "full":
             if self.drawer.isVisible():
                 self.drawer.hide()
-            elif self.osd_visible:
-                self.hide_osd(force=True)
             else:
+                # Tek tık oynat/duraklat (Boşluk ile aynı); çift tık tam ekran
+                self.toggle_pause()
                 self.show_osd()
 
     def wheelEvent(self, e):

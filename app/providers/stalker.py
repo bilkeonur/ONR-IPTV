@@ -115,7 +115,7 @@ class StalkerProvider(Provider):
         with self._lock:
             self.token = ""
             js = None
-            for _ in range(2):
+            for _attempt in range(2):
                 try:
                     r = self.session.get(self.endpoint, params={"type": "stb", "action": "handshake",
                                                                 "token": "", "JsHttpRequest": "1-xml"},

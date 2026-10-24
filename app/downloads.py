@@ -39,6 +39,14 @@ def usable_dir(settings, sub=""):
     raise RuntimeError(_("İndirme klasörü oluşturulamadı. Menü → İndirme bölümünden başka bir klasör seçin."))
 
 
+def _is_network_error(e):
+    if isinstance(e, requests.exceptions.RequestException):
+        return True
+    msg = str(e).lower()
+    return any(k in msg for k in ("connection broken", "connection reset", "connection aborted", "timed out",
+                                  "incompleteread", _("Bağlantı kesildi, devam ettirmek için tekrar başlatın.").lower()))
+
+
 def safe_filename(name):
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .")
     return name[:150] or "video"
@@ -64,6 +72,21 @@ class DownloadManager(QObject):
         self._lock = threading.Lock()
         self._progress.connect(self.changed.emit)
         self._last_save = 0
+        self.conn_limit = 0  # sağlayıcının bildirdiği eşzamanlı bağlantı sınırı (0 = bilinmiyor)
+
+    MAX_RETRIES = 3
+
+    def set_connection_limit(self, n):
+        """Hesap bilgisi gelince çağrılır; indirmeler bu sınırı aşmaz (aşarsa sunucu ilk bağlantıyı keser)."""
+        try:
+            self.conn_limit = max(0, int(str(n or 0).strip() or 0))
+        except ValueError:
+            self.conn_limit = 0
+        self._schedule()
+
+    def limit(self):
+        n = max(1, int(self.settings.get("max_downloads", 1)))
+        return min(n, self.conn_limit) if self.conn_limit > 0 else n
 
     # --- Genel arayüz --------------------------------------------------
     def find(self, tid):
@@ -168,8 +191,8 @@ class DownloadManager(QObject):
         for ev in self._stop.values():
             ev.set()
         for t in self.tasks:
-            if t["status"] in (RUNNING, RESOLVING):
-                t["status"] = PAUSED
+            if t["status"] in (RUNNING, RESOLVING, QUEUED):
+                t["status"] = PAUSED  # açılışta kendiliğinden başlamasın
         self._save(force=True)
 
     # --- İç işleyiş ----------------------------------------------------
@@ -186,8 +209,9 @@ class DownloadManager(QObject):
 
     def _schedule(self):
         with self._lock:
-            running = sum(1 for t in self.tasks if t["status"] in (RUNNING, RESOLVING))
-            limit = max(1, int(self.settings.get("max_downloads", 2)))
+            # Yeniden denemeyi bekleyen görevin iş parçacığı da bağlantı sayılır
+            running = len(self._threads)
+            limit = self.limit()
             for t in reversed(self.tasks):
                 if running >= limit:
                     break
@@ -211,10 +235,23 @@ class DownloadManager(QObject):
     def _run(self, t, stop):
         try:
             self._download(t, stop)
+            t.pop("_retries", None)
+            t.pop("note", None)
         except Exception as e:  # noqa: BLE001
             if not stop.is_set():
-                t["status"] = FAILED
-                t["error"] = str(e)[:200]
+                n = t.get("_retries", 0)
+                if _is_network_error(e) and n < self.MAX_RETRIES:
+                    # Kopan bağlantı: biraz bekleyip kaldığı yerden (HTTP Range) yeniden dene
+                    t["_retries"] = n + 1
+                    t["note"] = _("Bağlantı koptu, yeniden deneniyor ({n}/{max})", n=n + 1, max=self.MAX_RETRIES)
+                    t["status"] = QUEUED
+                    self._progress.emit(t["id"])
+                    if stop.wait(4 * (n + 1)):
+                        return
+                else:
+                    t["status"] = FAILED
+                    t["error"] = str(e)[:200]
+                    t.pop("note", None)
         finally:
             t["speed"] = 0
             self._finish_thread(t)

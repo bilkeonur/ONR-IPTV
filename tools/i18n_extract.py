@@ -27,6 +27,18 @@ def _name(func):
     return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
 
 
+_OWN_SCOPE = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.FunctionDef,
+              ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _walk_scope(node):
+    """ast.walk gibi, ama kendi kapsamı olan iç yapılara (lambda, üreteç, iç fonksiyon) inmez."""
+    yield node
+    for child in ast.iter_child_nodes(node):
+        if not isinstance(child, _OWN_SCOPE):
+            yield from _walk_scope(child)
+
+
 def keys():
     out = {}
     for path in sorted(SOURCES):
@@ -59,6 +71,21 @@ def check():
                         print(f"{os.path.relpath(path, ROOT)}:{c.lineno}: {c.value!r}")
                         found += 1
     print(f"{found} şüpheli metin")
+    # Fonksiyon içinde "_" adına değer atamak (ör. "a, _ = f()") o fonksiyondaki tüm _() çağrılarını bozar
+    bad = 0
+    for path in sorted(SOURCES):
+        tree = ast.parse(open(path, encoding="utf-8").read(), path)
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body = [n for stmt in fn.body for n in _walk_scope(stmt)]
+            uses = any(isinstance(n, ast.Call) and _name(n.func) == "_" for n in body)
+            stores = [n for n in body if isinstance(n, ast.Name) and n.id == "_" and isinstance(n.ctx, ast.Store)]
+            if uses and stores:
+                for n in stores:
+                    print(f"HATA {os.path.relpath(path, ROOT)}:{n.lineno}: '_' çeviri fonksiyonunu gölgeliyor")
+                    bad += 1
+    print(f"{bad} gölgeleme hatası")
 
 
 def main():

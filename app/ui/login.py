@@ -2,7 +2,7 @@
 from ..i18n import _
 from ..providers import ProviderError, create_provider, parse_xtream_m3u_link, random_mac
 from ..qt import (QButtonGroup, QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
-                  QPushButton, QStackedWidget, Qt, QVBoxLayout, QWidget, Signal)
+                  QPushButton, QScrollArea, QStackedWidget, Qt, QVBoxLayout, QWidget, Signal)
 from ..tasks import run_async
 from . import theme
 from .icons import icon
@@ -166,7 +166,7 @@ class ProfileForm(QWidget):
         self.status.setText("")
 
     def _pick_file(self):
-        fn, _ = QFileDialog.getOpenFileName(self, _("M3U dosyası seç"), "",
+        fn, _filter = QFileDialog.getOpenFileName(self, _("M3U dosyası seç"), "",
                                             _("Çalma listesi") + " (*.m3u *.m3u8);;" + _("Tümü") + " (*)")
         if fn:
             self.m_url.setText(fn)
@@ -244,7 +244,16 @@ class WelcomePage(QWidget):
     def __init__(self, settings, parent=None):
         super().__init__(parent)
         self.setObjectName("Page")
-        outer = QHBoxLayout(self)
+        # Ekran klavyesi açılınca (600 piksel yükseklikte) form ezilmesin, kaydırılabilsin
+        page = QVBoxLayout(self)
+        page.setContentsMargins(0, 0, 0, 0)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        page.addWidget(self.scroll)
+        inner = QWidget()
+        self.scroll.setWidget(inner)
+        outer = QHBoxLayout(inner)
         outer.setContentsMargins(20, 16, 20, 16)
         outer.addStretch(1)
         card = QFrame()

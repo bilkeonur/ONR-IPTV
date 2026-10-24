@@ -28,16 +28,18 @@ loaded from that account on every start.
 
 | | |
 |---|---|
-| ![Live TV](docs/screenshots/02_live_tv.png) | ![Player](docs/screenshots/03_player.png) |
-| **Live TV**: categories, EPG "now playing", preview player, daily schedule | **Player**: overlay controls, EPG progress, audio/subtitle/aspect, recording |
-| ![Channel list](docs/screenshots/04_channel_list.png) | ![Movies](docs/screenshots/05_movies.png) |
-| **In-player channel list** for quick zapping | **Movies**: poster grid, categories, search, sorting |
-| ![Movie detail](docs/screenshots/06_movie_detail.png) | ![Series](docs/screenshots/07_series_detail.png) |
-| **Movie details**: plot, cast, resume, download, favourite | **Series**: seasons, episodes, resume, auto next episode |
-| ![Downloads](docs/screenshots/08_downloads.png) | ![Menu](docs/screenshots/09_menu.png) |
-| **Downloads**: pause/resume, disk space check, offline playback | **Menu**: profiles, account info, player and parental settings |
-| ![Keyboard](docs/screenshots/10_keyboard.png) | ![Welcome](docs/screenshots/01_welcome.png) |
-| **On-screen keyboard** (Turkish Q layout) for touch screens | **First launch**: add an Xtream, M3U or Stalker account |
+| ![Live TV](docs/screenshots/02_live_tv.png) | ![TV Guide](docs/screenshots/11_tv_guide.png) |
+| **Live TV**: categories, language filter, EPG "now playing", preview player with its own controls, locked channels | **TV Guide**: all channels on a timeline, catch-up for archived programmes |
+| ![Multi-view](docs/screenshots/12_multiview.png) | ![Player](docs/screenshots/03_player.png) |
+| **Multi-view (Windows)**: up to 4 channels, pick the audio, enlarge, drag to rearrange | **Player**: click / Space to pause, audio/subtitle/aspect, speed, Chromecast |
+| ![Channel list](docs/screenshots/04_channel_list.png) | ![Search](docs/screenshots/13_search.png) |
+| **In-player channel list** for quick zapping | **Global search** across channels, movies and series |
+| ![Movies](docs/screenshots/05_movies.png) | ![Movie detail](docs/screenshots/06_movie_detail.png) |
+| **Movies**: poster grid, categories, language filter, watch progress | **Movie details**: plot, cast, resume, download, favourite |
+| ![Series](docs/screenshots/07_series_detail.png) | ![Downloads](docs/screenshots/08_downloads.png) |
+| **Series**: seasons, episodes, watched marks, live download status | **Downloads**: colour-coded states (downloading, downloaded, watching, watched), queue |
+| ![Menu](docs/screenshots/09_menu.png) | ![Keyboard](docs/screenshots/10_keyboard.png) |
+| **Menu**: profiles, account info, language, text size, player and parental settings | **On-screen keyboard** (Turkish Q layout); forms scroll so fields stay visible |
 
 ### Features
 
@@ -57,8 +59,10 @@ loaded from that account on every start.
   selection, aspect ratio, playback speed, live recording, automatic reconnect, HLS quality limit.
 - **Movies and series**: poster grid, detail pages, seasons and episodes, resume where you left off,
   automatic next episode, favourites from the player's star button.
-- **Downloads**: movies and episodes with pause/resume (HTTP Range), live progress on the episode list,
-  resume playback, watched / partly watched marks, files deleted from the folder disappear from the list.
+- **Downloads**: movies and episodes with pause/resume (HTTP Range), a queue that respects your provider's
+  connection limit (a second download waits instead of breaking the first), automatic retry from where it
+  stopped when the connection drops, colour-coded states, live progress on the episode list, resume playback,
+  watched / partly watched marks, files deleted from the folder disappear from the list.
 - **Parental control**: lock single channels, movies, series or whole categories with a 4-digit PIN; after
   entering the PIN, protected content stays unlocked for 5 minutes.
 - **Languages**: Turkish and English. The system language is used by default (Turkish if Windows is
@@ -151,6 +155,17 @@ ONR IPTV; Python, Qt ve libmpv ile yazılmış bir IPTV oynatıcıdır. Aynı ko
 dokunmatik ekranlı Raspberry Pi 4'te çalışır. Uygulamada **hiç hazır kanal yoktur**: ilk açılışta kendi
 Xtream, M3U ya da Stalker hesabınızı eklersiniz, liste her açılışta bu hesaptan yüklenir.
 
+### Ekran görüntüleri
+
+| | |
+|---|---|
+| ![Canlı TV](docs/screenshots/02_live_tv.png) | ![TV Rehberi](docs/screenshots/11_tv_guide.png) |
+| **Canlı TV**: kategoriler, dil filtresi, önizleme oynatıcı ve kontrolleri, kilitli kanallar | **TV Rehberi**: tüm kanallar saat çizelgesinde |
+| ![Çoklu ekran](docs/screenshots/12_multiview.png) | ![İndirilenler](docs/screenshots/08_downloads.png) |
+| **Çoklu ekran (Windows)**: 4 kanala kadar | **İndirilenler**: renkli durumlar ve kuyruk |
+
+Diğer ekranlar için yukarıdaki [English](#screenshots) bölümüne bakın.
+
 ### Özellikler
 
 | Bölüm | Neler var |
@@ -161,9 +176,9 @@ Xtream, M3U ya da Stalker hesabınızı eklersiniz, liste her açılışta bu he
 | **Chromecast** | Canlı yayın, film, dizi ve indirilen dosyaları Chromecast / Google TV'ye gönderme ([pychromecast](https://github.com/home-assistant-libs/pychromecast)) |
 | **Genel arama** | Kanal, film ve dizilerde tek seferde arama |
 | **İçerik dili filtresi** | Kategori ve kanal adlarındaki `TR \|`, `[DE]`, `UK:` gibi etiketlerden dil otomatik algılanır |
-| **Oynatıcı** | Donanım hızlandırmalı libmpv, video üstü kontroller, kanal yukarı/aşağı, video üstünde kanal listesi, ses dili ve altyazı, görüntü oranı, hız, canlı yayın kaydı, otomatik yeniden bağlanma, yayın kalitesi sınırı, yıldız düğmesiyle favoriye ekleme |
+| **Oynatıcı** | Donanım hızlandırmalı libmpv, videoya tıklayınca ya da Boşluk ile oynat/duraklat, video üstü kontroller, kanal yukarı/aşağı, video üstünde kanal listesi, ses dili ve altyazı, görüntü oranı, hız, canlı yayın kaydı, otomatik yeniden bağlanma, yayın kalitesi sınırı, yıldız düğmesiyle favoriye ekleme |
 | **Filmler / Diziler** | Poster ızgarası, detay ekranı, sezon ve bölüm listesi, kaldığın yerden devam, sonraki bölüme otomatik geçiş, favoriler |
-| **İndirilenler** | Film ve bölüm indirme, duraklatıp kaldığı yerden devam, bölüm listesinde anlık ✓ işareti, indirilen içerikte kaldığı yerden oynatma, izlendi / yarım kaldı işareti, klasörden silinen dosyalar listeden kalkar, disk alanı kontrolü |
+| **İndirilenler** | Film ve bölüm indirme, duraklatıp kaldığı yerden devam, sağlayıcının bağlantı sınırına uyan indirme kuyruğu (ikinci indirme ilkini koparmaz, sırasını bekler), bağlantı koparsa kaldığı yerden otomatik yeniden deneme, renkli durumlar (indiriliyor / indirildi / izleniyor / izlendi), bölüm listesinde anlık ✓ işareti, indirilen içerikte kaldığı yerden oynatma, klasörden silinen dosyalar listeden kalkar, disk alanı kontrolü |
 | **Ebeveyn denetimi** | Kanal, film, dizi ya da kategori bazında 4 haneli PIN ile kilit; PIN girilince korumalı içerik 5 dakika açık kalır |
 | **Dil** | Türkçe ve İngilizce. Varsayılan sistem dilidir (Windows Türkçe ise Türkçe, değilse İngilizce). Çeviriler `app/lang/*.json` dosyalarındadır, kod değiştirmeden yeni dil eklenebilir |
 | **Menü** | Birden fazla profil, hesap bilgisi (bitiş tarihi, bağlantı sayısı), yazı boyutu, donanım hızlandırma, tampon, TS/HLS, yayın kalitesi, kategori gizleme, ekran klavyesi, indirme klasörü |
@@ -249,7 +264,8 @@ Dokunmatik ekranda videoya dokununca kontroller açılır ya da kapanır. Listel
 
 ### Notlar
 
-- Birçok IPTV hesabı tek bağlantıya izin verir. İndirme sürerken aynı anda izleme yapılamayabilir.
+- Birçok IPTV hesabı tek bağlantıya izin verir. İndirmeler bu sınıra göre sıraya alınır; indirme sürerken aynı
+  anda izleme yapılamayabilir.
 - HLS (`.m3u8`) olarak sunulan filmler doğrudan indirilemez, sadece izlenebilir.
 - Chromecast yayını kendisi açar; sağlayıcıya özel User-Agent / Referer başlıkları gönderilemediği için bazı
   sağlayıcılarda TV'de açılmayabilir. İndirilen dosyalar yerel ağdan paylaşılır, ilk seferde Windows Güvenlik

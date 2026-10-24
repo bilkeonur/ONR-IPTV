@@ -13,7 +13,7 @@ from . import theme
 from .icons import icon
 from .player import fmt_time
 from .vod_page import PosterLabel
-from .widgets import StatusView, enable_kinetic
+from .widgets import ElidedLabel, StatusView, enable_kinetic
 
 
 def human(n):
@@ -44,19 +44,18 @@ class TaskRow(QFrame):
         col.setSpacing(4)
         trow = QHBoxLayout()
         trow.setSpacing(8)
-        self.title = QLabel(task["title"])
-        trow.addWidget(self.title)
+        self.title = ElidedLabel(task["title"])
+        trow.addWidget(self.title, 0)
         self.badge = QLabel()
-        trow.addWidget(self.badge)
+        trow.addWidget(self.badge, 0)
         trow.addStretch(1)
         col.addLayout(trow)
         self.bar = QProgressBar()
         self.bar.setFixedHeight(5)
         self.bar.setTextVisible(False)
         col.addWidget(self.bar)
-        self.info = QLabel()
+        self.info = ElidedLabel()
         self.info.setObjectName("Muted")
-        self.info.setTextFormat(Qt.TextFormat.RichText)
         col.addWidget(self.info)
         lay.addLayout(col, 1)
         self.btn_play = self._btn("play", _("Oynat"), lambda: self.play.emit(self.tid))
@@ -137,8 +136,10 @@ class TaskRow(QFrame):
             txt += f": {t.get('error', '')}"
         elif st == PAUSED and total:
             txt += "  ·  " + _("%{n}", n=int(done / total * 100))
+        elif st == QUEUED:
+            txt = t.get("note") or _("Sırada · önceki indirme bitince başlar")
         self.bar.setVisible(not watched)
-        self.info.setText(html.escape(txt))
+        self.info.setText(txt)
         self.info.setStyleSheet(f"color:{theme.DANGER};" if st == FAILED else "")
         self.btn_play.setVisible(st == DONE)
         self.btn_pause.setVisible(st in (RUNNING, QUEUED, RESOLVING))
@@ -195,6 +196,7 @@ class DownloadsPage(QWidget):
         legend.setObjectName("Muted")
         legend.setTextFormat(Qt.TextFormat.RichText)
         head.addWidget(legend)
+        self.legend = legend
         head.addStretch(1)
         self.disk = QLabel()
         self.disk.setObjectName("Muted")
@@ -246,6 +248,10 @@ class DownloadsPage(QWidget):
         self.status.setVisible(not has)
         self.count.setText(str(len(self.dm.tasks)))
         self._disk()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.legend.setVisible(self.width() >= 820)  # dar ekranda renk açıklaması gizlenir
 
     def _disk(self):
         d = self.ctx.settings.get("download_dir")

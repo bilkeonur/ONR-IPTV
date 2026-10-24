@@ -153,7 +153,7 @@ class ChannelDelegate(QStyledItemDelegate):
         tw = right - x
         cur = None
         if self.ctx.show_epg and self.ctx.epg is not None:
-            cur, _ = self.ctx.epg.now_next(it)
+            cur, _nxt = self.ctx.epg.now_next(it)
         p.setFont(self.f_name)
         p.setPen(QColor(theme.ACCENT if playing else theme.TEXT))
         fm = QFontMetrics(self.f_name)
@@ -571,6 +571,44 @@ class CategoryPicker(QDialog):
     def _pick(self, it):
         self.chosen = it.data(ItemRole)
         self.accept()
+
+
+class ElidedLabel(QLabel):
+    """Sığmayan metni "…" ile kısaltan etiket; dar pencerede yanındaki düğmeleri dışarı itmez."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._full = ""
+        self.setText(text)
+
+    def setText(self, text):
+        self._full = text or ""
+        self.setToolTip(self._full)
+        self._elide()
+        self.updateGeometry()
+
+    def text(self):
+        return self._full
+
+    def sizeHint(self):
+        sh = super().sizeHint()
+        return QSize(self.fontMetrics().horizontalAdvance(self._full) + 6, sh.height())
+
+    def minimumSizeHint(self):
+        return QSize(30, super().minimumSizeHint().height())
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._elide()
+
+    def changeEvent(self, e):
+        super().changeEvent(e)
+        if e.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._elide()
+
+    def _elide(self):
+        QLabel.setText(self, self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideRight,
+                                                           max(10, self.width())))
 
 
 class SearchBox(QLineEdit):

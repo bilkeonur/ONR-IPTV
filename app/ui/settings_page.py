@@ -140,7 +140,7 @@ class SettingsPage(QWidget):
         f, v = card(_("Hesap bilgisi"), "info")
         self.account = QLabel("—")
         self.account.setTextFormat(Qt.TextFormat.RichText)
-        self.account.setWordWrap(True)
+        self.account.setWordWrap(False)  # kısa satırlar; kaydırmalı alanda yükseklik doğru hesaplansın
         v.addWidget(self.account)
         row = QHBoxLayout()
         b = QPushButton("  " + _("Listeyi yenile"))

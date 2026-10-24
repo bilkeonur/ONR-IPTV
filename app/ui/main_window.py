@@ -11,7 +11,7 @@ from ..library import FAV_CAT, Library
 from ..providers import EPISODE, LIVE, MOVIE, SERIES
 from ..qt import (QApplication, QButtonGroup, QDialog, QEasingCurve, QFrame, QGraphicsOpacityEffect, QGridLayout,
                   QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPropertyAnimation, QPushButton,
-                  QSize, QStackedWidget, Qt, QTimer, QVBoxLayout, QWidget)
+                  QScrollArea, QSize, QStackedWidget, Qt, QTimer, QVBoxLayout, QWidget)
 from ..tasks import run_async
 from . import theme
 from .downloads_page import DownloadsPage
@@ -251,9 +251,13 @@ class MainWindow(QMainWindow):
         self.root_stack.addWidget(main)
 
         # 2: profil düzenleyici (dokunmatik klavye ile çalışabilmesi için pencere içinde)
-        self.editor_host = QWidget()
+        self.editor_host = QScrollArea()  # klavye açıkken de form ezilmeden kaydırılabilir
         self.editor_host.setObjectName("Page")
-        self.editor_lay = QVBoxLayout(self.editor_host)
+        self.editor_host.setWidgetResizable(True)
+        self.editor_host.setFrameShape(QFrame.Shape.NoFrame)
+        editor_inner = QWidget()
+        self.editor_host.setWidget(editor_inner)
+        self.editor_lay = QVBoxLayout(editor_inner)
         self.editor_lay.setContentsMargins(40, 20, 40, 20)
         self.root_stack.addWidget(self.editor_host)
         self.editor = None
@@ -352,6 +356,8 @@ class MainWindow(QMainWindow):
         self.ctx.library = lib
         self.ctx.epg.set_provider(lib.provider)
         lib.account_ready.connect(self.menu.set_account)
+        self.ctx.downloads.set_connection_limit(0)
+        lib.account_ready.connect(lambda acc: self.ctx.downloads.set_connection_limit((acc or {}).get("max_connections")))
         lib.section_ready.connect(lambda s: self.menu.set_account(lib.account))
         for page in (self.live, self.series, self.movies):
             page.set_library(lib)
@@ -899,6 +905,10 @@ class MainWindow(QMainWindow):
         if isinstance(new, QLineEdit) and self.isAncestorOf(new):
             self.osk.attach(new)
             QTimer.singleShot(0, self._place_player)
+            # Klavye alanın üstünü kapatmasın: kaydırılabilir sayfada alanı görünür yap
+            for area in (self.welcome.scroll, self.editor_host):
+                if area.isAncestorOf(new):
+                    QTimer.singleShot(60, lambda a=area, w=new: a.ensureWidgetVisible(w, 20, 40))
         elif new is not None and not self.osk.isAncestorOf(new) and not isinstance(new, QLineEdit):
             if self.osk.isVisible():
                 self.osk.hide()

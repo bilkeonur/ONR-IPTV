@@ -132,8 +132,9 @@ class EpisodeRow(QFrame):
         trow.addStretch(1)
         col.addLayout(trow)
         meta = []
-        if ep.extra.get("duration"):
-            meta.append(str(ep.extra["duration"]))
+        dur = str(ep.extra.get("duration") or "").strip()
+        if dur.strip("0:. "):  # sağlayıcı süreyi bilmiyorsa "00:00:00" gönderiyor
+            meta.append(dur)
         plot = (ep.extra.get("plot") or "").strip()
         if plot:
             meta.append(plot[:110] + ("…" if len(plot) > 110 else ""))
@@ -503,7 +504,7 @@ class DetailView(QWidget):
             lbl.setObjectName("Muted")
             self.eps.addWidget(lbl)
             return
-        target, _ = self._resume_target()
+        target, _prog = self._resume_target()
         sel = target.extra.get("season") if target is not None else None
         for s in self.seasons:
             b = QPushButton(_("Sezon {n}", n=s))
@@ -590,7 +591,14 @@ class VodPage(QWidget):
         self.count = QLabel()
         self.count.setObjectName("Badge")
         head.addWidget(self.count)
-        head.addStretch(1)
+        head.addSpacing(14)
+        # Arama kutusu başlığın yanında, boş alanı doldurarak uzun durur; dil ve diğerleri sağda
+        self.search = SearchBox(_("Film ara…") if kind == MOVIE else _("Dizi ara…"))
+        self.search.setMinimumWidth(180)
+        self.search.setMaximumWidth(520)
+        self.search.debounced.connect(self._on_search)
+        head.addWidget(self.search, 1)
+        head.addStretch(0)  # arama kutusu en fazla genişliğe ulaşınca kalan boşluk buraya
         self.btn_clear = QPushButton("  " + _("Listeyi temizle"))
         self.btn_clear.setIcon(icon("delete", theme.DANGER))
         self.btn_clear.setObjectName("Danger")
@@ -600,11 +608,6 @@ class VodPage(QWidget):
         self.lang_box = LangFilterBox()
         self.lang_box.changedLang.connect(self._on_lang)
         head.addWidget(self.lang_box)
-        self.search = SearchBox(_("Film ara…") if kind == MOVIE else _("Dizi ara…"))
-        self.search.setMinimumWidth(140)
-        self.search.setMaximumWidth(240)
-        self.search.debounced.connect(self._on_search)
-        head.addWidget(self.search)
         self.sort_box = QComboBox()
         for k, v in SORTS:
             self.sort_box.addItem(_(v), k)

@@ -99,7 +99,7 @@ DEFAULTS = {
     "volume": 100,
     "user_agent": "VLC/3.0.20 LibVLC/3.0.20",
     "download_dir": _default_download_dir(),
-    "max_downloads": 2,
+    "max_downloads": 1,  # ayrıca sağlayıcının bağlantı sınırıyla kısıtlanır
     "touch_scroll": True,
     "osk_enabled": IS_LINUX,  # ekran klavyesi (dokunmatik Pi ekranı için)
     "start_fullscreen": IS_ARM,
