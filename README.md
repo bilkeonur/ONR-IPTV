@@ -276,6 +276,16 @@ Dokunmatik ekranda videoya dokununca kontroller açılır ya da kapanır. Listel
 
 ---
 
+## License / Lisans
+
+ONR IPTV is free software under the **GNU General Public License v3.0 or later** ([LICENSE](LICENSE)).
+Bundled components and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+ONR IPTV, **GNU Genel Kamu Lisansı v3.0 veya sonrası** ile dağıtılan özgür bir yazılımdır ([LICENSE](LICENSE)).
+Birlikte dağıtılan bileşenler ve lisansları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasındadır.
+
+---
+
 <div align="center">
 
 Developed by / Geliştirici: **Onur BiLKE**
