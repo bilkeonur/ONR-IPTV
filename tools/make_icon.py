@@ -32,5 +32,11 @@ def render(size):
 
 
 render(256).save(os.path.join(out, "icon.png"))
-render(256).save(os.path.join(out, "icon.ico"))
+# Store logoları (1240 piksele kadar) için büyük kaynak; vektörden çizildiği için her boyutta keskin
+render(1024).save(os.path.join(out, "icon_1024.png"))
+# Çok boyutlu ICO (16-256): Windows her yerde doğru boyutu seçer
+from PIL import Image  # noqa: E402
+Image.open(os.path.join(out, "icon_1024.png")).save(os.path.join(out, "icon.ico"),
+                                                    sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)],
+                                                    bitmap_format="bmp")  # PNG'yi küçük boyutlarda her Windows bileşeni okumuyor
 print("ok", os.listdir(out))
