@@ -33,6 +33,7 @@ exe = EXE(
     name="ONRIPTV",
     console=False,
     icon="assets/icon.ico",
+    manifest="packaging/windows/ONRIPTV.exe.manifest",
     upx=False,
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="ONRIPTV")

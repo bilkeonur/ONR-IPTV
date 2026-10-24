@@ -1,7 +1,7 @@
 # Microsoft Store listing / Mağaza sayfası metinleri
 
 Partner Center → submission → **Store listings** → language. Fields are in the order Partner Center shows them.
-Screenshots: at least 1366x768 for desktop (the 1024x600 images in `docs/screenshots` are too small); use 1600x900 ones.
+Screenshots: at least 1366x768 for desktop (the 1024x600 images in `docs/screenshots` are too small); upload the 1600x900 sets in `docs/store/screenshots/tr` and `docs/store/screenshots/en`, in file-name order.
 
 Common to both languages:
 
