@@ -8,7 +8,7 @@ import uuid
 
 APP_NAME = "ONR IPTV"
 APP_ID = "ONRIPTV"          # klasör ve dosya adlarında kullanılan boşluksuz ad
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 APP_AUTHOR = "Onur BiLKE"
 _OLD_ID = "TurkuazTV"       # önceki sürümün klasör adı (otomatik taşınır)
 
