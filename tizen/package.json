@@ -1,0 +1,19 @@
+{
+  "name": "onriptv-tizen",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ONR IPTV for Samsung Smart TV (Tizen)",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/tv.mjs",
+    "tv": "node scripts/tv.mjs",
+    "typecheck": "tsc --noEmit",
+    "fake-server": "python scripts/fake_xtream.py"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}

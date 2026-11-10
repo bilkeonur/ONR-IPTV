@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080, user-scalable=no">
+  <title>ONR IPTV</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Samsung TV API'leri (AVPlay, ürün bilgisi); tarayıcıda yüklenmez, sorun değil -->
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+<body>
+  <div id="stage">
+    <object id="avplayer" type="application/avplayer"></object>
+    <video id="html5player" playsinline></video>
+    <div id="app"></div>
+    <div id="toast"></div>
+    <div id="busy"><div class="spinner"></div></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
