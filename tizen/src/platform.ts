@@ -10,6 +10,8 @@ export type Key =
   | 'up' | 'down' | 'left' | 'right' | 'ok' | 'back'
   | 'chup' | 'chdown' | 'playpause' | 'play' | 'pause' | 'stop' | 'ff' | 'rw'
   | 'red' | 'green' | 'yellow' | 'blue' | 'info' | 'done' | 'cancel'
+  /** OK tuşuna basılı tutma */
+  | 'okhold'
   | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 
 const TIZEN_KEYS = [

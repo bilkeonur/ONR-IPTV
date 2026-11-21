@@ -1,11 +1,12 @@
 // Ana ekran: büyük bölüm kutucukları ve "İzlemeye devam et" sırası.
 import { Screen, toast } from '../app';
-import { currentLang, StrKey, t } from '../i18n';
+import { StrKey, expiryText, t } from '../i18n';
 import { open } from '../nav';
 import { Key, exitApp } from '../platform';
 import { session } from '../session';
 import { Progress, store } from '../store';
 import { ICONS, h, icon, poster } from '../ui/dom';
+import { askPin } from '../ui/pin';
 import { TopBar } from '../ui/topbar';
 
 type TileId = 'live' | 'movie' | 'series' | 'settings';
@@ -23,10 +24,6 @@ export function homeScreen(): Screen {
   let rowIdx = 0;
   let items: Progress[] = [];
   let backArmed = 0;
-  // OK basılı tutma: kısa basış açar, uzun basış listeden kaldırır
-  let okDown = false;
-  let okHeld = false;
-  let okTimer = 0;
 
   const account = h('div', 'topbar-account');
   const bar = new TopBar('', account);
@@ -58,7 +55,7 @@ export function homeScreen(): Screen {
   }
 
   function fillRow() {
-    items = store.progressList(session.pid).slice(0, 20);
+    items = store.progressList(session.pid).filter((p) => !session.isAdult(p.media.kind, p.media)).slice(0, 20);
     rowInner.innerHTML = '';
     items.forEach((p) => rowInner.appendChild(card(p)));
     rowWrap.style.display = items.length ? '' : 'none';
@@ -70,10 +67,8 @@ export function homeScreen(): Screen {
     const p = session.profile;
     const a = session.account;
     let text = p ? p.name : '';
-    if (a && a.expires && a.expires !== '0' && a.expires !== 'null') {
-      const d = new Date(parseInt(a.expires, 10) * 1000).toLocaleDateString(currentLang() === 'tr' ? 'tr-TR' : 'en-GB');
-      text += `  ·  ${t('expires_on', d)}`;
-    }
+    const exp = a ? expiryText(a.expires) : '';
+    if (exp) text += `  ·  ${t('expires_on', exp)}`;
     account.textContent = text;
   }
 
@@ -102,6 +97,14 @@ export function homeScreen(): Screen {
   }
 
   function openProgress(p: Progress) {
+    if (session.isItemLocked(p.media.kind, p.media)) {
+      askPin().then((ok) => { if (ok) openProgress2(p); });
+      return;
+    }
+    openProgress2(p);
+  }
+
+  function openProgress2(p: Progress) {
     if (p.media.kind === 'movie') open('play', { media: p.media, startAt: p.pos });
     else open('detail', p.media);
   }
@@ -113,19 +116,15 @@ export function homeScreen(): Screen {
       fillAccount();
       fillRow();
       paint();
+      // Yetişkin içeriği ayıklayabilmek için kategori adları gerekir (önbellekteyse anında döner)
+      if (session.provider) {
+        Promise.all([session.mediaCategories('movie'), session.mediaCategories('series')])
+          .then(() => { fillRow(); paint(); })
+          .catch(() => undefined);
+      }
     },
     onHide() {
       bar.stop();
-      clearTimeout(okTimer);
-      okDown = false;
-    },
-    onKeyUp(key: Key) {
-      if (key !== 'ok' || !okDown) return;
-      okDown = false;
-      clearTimeout(okTimer);
-      const cards = rowInner.children;
-      for (let i = 0; i < cards.length; i++) cards[i].classList.remove('holding');
-      if (!okHeld && zone === 'row' && items[rowIdx]) openProgress(items[rowIdx]);
     },
     onKey(key: Key): boolean {
       if (zone === 'tiles') {
@@ -143,19 +142,10 @@ export function homeScreen(): Screen {
         } else if (key === 'up') {
           zone = 'tiles';
         } else if (key === 'ok' && items[rowIdx]) {
-          // Tuş basılıyken gelen tekrarları yok say
-          if (!okDown) {
-            okDown = true;
-            okHeld = false;
-            const card = rowInner.children[rowIdx] as HTMLElement | undefined;
-            if (card) card.classList.add('holding');
-            okTimer = window.setTimeout(() => {
-              okHeld = true;
-              removeCurrent();
-            }, 800);
-          }
+          openProgress(items[rowIdx]);
           return true;
-        } else if (key === 'red') {
+        } else if (key === 'okhold' || key === 'red') {
+          // OK'a basılı tutunca listeden kaldırır
           removeCurrent();
           return true;
         }

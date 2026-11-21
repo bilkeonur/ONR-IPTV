@@ -3,3 +3,8 @@ build/
 *.wgt
 .buildResult/
 .sign/
+# Samsung imza sertifikaları (özel anahtar içerir, depoya girmemeli)
+certs/
+*.p12
+*.pri
+*.pwd

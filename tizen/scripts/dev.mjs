@@ -21,8 +21,12 @@ watch(join(ROOT, 'static'), { recursive: true }, () => copyStatic());
 
 async function proxy(req, res, target) {
   try {
+    const headers = { 'User-Agent': req.headers['x-ua'] || 'ONRIPTV-Tizen' };
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (k.startsWith('x-fwd-')) headers[k.slice(6)] = String(v);
+    }
     const r = await fetch(target, {
-      headers: { 'User-Agent': req.headers['x-ua'] || 'ONRIPTV-Tizen' },
+      headers,
       redirect: 'follow',
       signal: AbortSignal.timeout(180000),
     });

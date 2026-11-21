@@ -83,6 +83,7 @@ export const ICONS = {
   movie: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="8" width="36" height="32" rx="4"/><path d="M14 8v32M34 8v32M6 18h8M6 30h8M34 18h8M34 30h8"/></svg>',
   series: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="14" width="30" height="24" rx="3"/><path d="M10 9h28a4 4 0 0 1 4 4v19"/><path d="M16 21l9 5-9 5z" fill="currentColor"/></svg>',
   settings: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="6"/><path d="M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2"/></svg>',
+  search: '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><circle cx="21" cy="21" r="13"/><path d="M31 31l11 11"/></svg>',
   play: '<svg viewBox="0 0 48 48"><path d="M14 8l28 16-28 16z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 48 48"><path d="M12 8h8v32h-8zM28 8h8v32h-8z" fill="currentColor"/></svg>',
   star: '<svg viewBox="0 0 24 24"><path d="M12 2l3 6.9 7.5.7-5.7 5 1.7 7.4L12 18.3 5.5 22l1.7-7.4-5.7-5 7.5-.7z" fill="currentColor"/></svg>',

@@ -4,17 +4,23 @@ Samsung televizyonlar (Tizen 5.5+, 2020 ve sonrası modeller) için ONR IPTV.
 HTML + TypeScript ile yazılmış bir Tizen web uygulamasıdır. Videolar Samsung'un
 donanım hızlandırmalı **AVPlay** oynatıcısıyla oynatılır.
 
-**Bu sürümde:** Xtream Codes ve M3U girişi, canlı TV (kategoriler, favoriler,
-son izlenen kanal), önizleme + tam ekran, kısa yayın akışı (Xtream), kanal
-numarasıyla geçiş, TR/EN dil desteği.
-**Sonraki adımlar:** filmler, diziler, arama, TV rehberi, ebeveyn kilidi, Stalker, M3U için XMLTV.
+**Bu sürümde:** Xtream Codes, M3U (isteğe bağlı XMLTV rehberi) ve Stalker portal; birden çok profil;
+canlı TV (kategoriler, favoriler, son izlenenler, sıralama, içerik dili filtresi, kanal numarasıyla geçiş,
+yayın koparsa yeniden bağlanma); TV rehberi ve kanal yayın akışı; geçmiş yayın (catch-up, Xtream);
+filmler ve diziler (favoriler, son izlenenler, izlendi işaretleri, kaldığı yerden devam, sıralama, dil filtresi);
+kanal, film ve dizilerde genel arama; ebeveyn kilidi (PIN, yetişkin kategorileri, kategori ve içerik kilidi);
+kategori gizleme; ses parçası, altyazı ve görüntü oranı seçimi; TR/EN dil desteği.
+İndirme, kayıt, çoklu ekran ve Chromecast yalnızca masaüstü sürümdedir.
+
+Kumanda: **Yeşil** favori, **Sarı** seçenekler menüsü (sıralama, dil, kilit, ses/altyazı), **Mavi** arama,
+**Kırmızı** TV rehberi, **Bilgi** kanalın yayın akışı.
 
 ## Tarayıcıda geliştirme
 
 ```bash
 cd tizen
 npm install
-npm run fake-server     # sahte Xtream sunucusu: http://localhost:8765, test / test
+npm run fake-server     # sahte sunucu: http://localhost:8765 — Xtream test/test, Stalker portal (aynı adres, herhangi bir 00:1A:79 MAC), M3U + XMLTV: /get.php?username=test&password=test
 npm run dev             # http://localhost:5173
 ```
 

@@ -3,10 +3,14 @@ import { setLang } from './i18n';
 import { register, restart } from './nav';
 import { isTizen, registerKeys } from './platform';
 import { player } from './player';
+import { catPickerScreen } from './screens/catpicker';
 import { detailScreen } from './screens/detail';
+import { guideScreen } from './screens/guide';
 import { homeScreen } from './screens/home';
 import { liveScreen } from './screens/live';
 import { loginScreen } from './screens/login';
+import { profilesScreen } from './screens/profiles';
+import { searchScreen } from './screens/search';
 import { settingsScreen } from './screens/settings';
 import { vodScreen } from './screens/vod';
 import { vodPlayerScreen } from './screens/vodplayer';
@@ -20,6 +24,10 @@ register('home', homeScreen);
 register('vod', vodScreen);
 register('detail', detailScreen);
 register('play', vodPlayerScreen);
+register('search', searchScreen);
+register('guide', guideScreen);
+register('profiles', profilesScreen);
+register('catpicker', catPickerScreen);
 
 async function start() {
   document.documentElement.classList.add(isTizen ? 'tizen' : 'browser');

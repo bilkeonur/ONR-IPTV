@@ -50,6 +50,7 @@ function toList(raw: any): Obj[] {
 
 export class XtreamProvider implements Provider {
   readonly kind = 'xtream' as const;
+  readonly paged: Section[] = [];
   private base: string;
 
   constructor(url: string, private username: string, private password: string, public liveExt: 'ts' | 'm3u8' = 'ts') {
@@ -102,30 +103,65 @@ export class XtreamProvider implements Provider {
       logo: str(d.stream_icon),
       categoryId: str(d.category_id) || first(d.category_ids),
       epgId: str(d.epg_channel_id),
+      archive: int(d.tv_archive) > 0,
+      added: int(d.added),
     }));
   }
 
-  streamUrl(ch: Channel): string {
+  async streamUrl(ch: Channel): Promise<string> {
     return `${this.base}/live/${this.username}/${this.password}/${ch.id}.${this.liveExt}`;
   }
 
+  private static listings(data: Obj | null): Program[] {
+    const listings = data && Array.isArray(data.epg_listings) ? (data.epg_listings as Obj[]) : [];
+    const now = Date.now() / 1000;
+    return listings
+      .map((p) => {
+        const end = int(p.stop_timestamp);
+        return {
+          title: b64(str(p.title)),
+          desc: b64(str(p.description)),
+          start: int(p.start_timestamp),
+          end,
+          startStr: str(p.start),
+          archive: str(p.has_archive) === '1' && end < now,
+        };
+      })
+      .filter((p) => p.start > 0)
+      .sort((a, b) => a.start - b.start);
+  }
+
   async shortEpg(ch: Channel): Promise<Program[]> {
-    let data: Obj | null;
     try {
-      data = await this.api({ action: 'get_short_epg', stream_id: ch.id, limit: 4 }, 10000);
+      return XtreamProvider.listings(await this.api({ action: 'get_short_epg', stream_id: ch.id, limit: 4 }, 10000));
     } catch {
       return [];
     }
-    const listings = data && Array.isArray(data.epg_listings) ? (data.epg_listings as Obj[]) : [];
-    return listings
-      .map((p) => ({
-        title: b64(str(p.title)),
-        desc: b64(str(p.description)),
-        start: int(p.start_timestamp),
-        end: int(p.stop_timestamp),
-      }))
-      .filter((p) => p.start > 0)
-      .sort((a, b) => a.start - b.start);
+  }
+
+  async epgTable(ch: Channel): Promise<Program[]> {
+    let progs: Program[] = [];
+    try {
+      progs = XtreamProvider.listings(await this.api({ action: 'get_simple_data_table', stream_id: ch.id }, 20000));
+    } catch { /* kısa akışa düş */ }
+    if (!progs.length) return this.shortEpg(ch);
+    // Üç gün öncesinden yarına kadar
+    const now = Date.now() / 1000;
+    return progs.filter((p) => p.end > now - 86400 * 3 && p.start < now + 86400);
+  }
+
+  catchupUrl(ch: Channel, p: Program): string {
+    if (!ch.archive || !p.archive) return '';
+    const dur = Math.max(1, Math.floor((p.end - p.start) / 60));
+    const m = /(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/.exec(p.startStr || '');
+    let start: string;
+    if (m) start = `${m[1]}:${m[2]}-${m[3]}`;
+    else {
+      const d = new Date(p.start * 1000);
+      const z = (n: number) => String(n).padStart(2, '0');
+      start = `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}:${z(d.getHours())}-${z(d.getMinutes())}`;
+    }
+    return `${this.base}/timeshift/${this.username}/${this.password}/${dur}/${start}/${ch.id}.ts`;
   }
 
   mediaCategories(section: Section): Promise<Category[]> {
@@ -237,11 +273,11 @@ export class XtreamProvider implements Provider {
     return { info, seasons };
   }
 
-  movieUrl(m: Media): string {
+  async movieUrl(m: Media): Promise<string> {
     return `${this.base}/movie/${this.username}/${this.password}/${m.id}.${m.ext || 'mp4'}`;
   }
 
-  episodeUrl(e: Episode): string {
+  async episodeUrl(e: Episode): Promise<string> {
     return `${this.base}/series/${this.username}/${this.password}/${e.id}.${e.ext || 'mp4'}`;
   }
 }

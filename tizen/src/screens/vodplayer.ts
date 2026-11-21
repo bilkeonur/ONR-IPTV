@@ -7,7 +7,8 @@ import { FULL, PlayerState, player } from '../player';
 import { Episode } from '../providers/types';
 import { session } from '../session';
 import { store } from '../store';
-import { duration, h, icon } from '../ui/dom';
+import { duration, h, hhmm, icon } from '../ui/dom';
+import { playerMenu, resetSubtitles } from '../ui/playeropts';
 
 export function vodPlayerScreen(req: PlayRequest): Screen {
   const media = req.media;
@@ -19,6 +20,8 @@ export function vodPlayerScreen(req: PlayRequest): Screen {
   let seekTarget: number | null = null;
   let seekTimer = 0;
   let state: PlayerState = 'idle';
+  let startToken = 0;
+  const catchup = req.catchup;
 
   const titleEl = h('div', 'vosd-title');
   const subEl = h('div', 'vosd-sub');
@@ -29,17 +32,23 @@ export function vodPlayerScreen(req: PlayRequest): Screen {
   const stateIcon = h('div', 'vosd-state');
   const osd = h('div', 'vosd',
     h('div', 'vosd-head', titleEl, subEl),
-    h('div', 'vosd-bar', timeEl, h('div', 'bar big', fill, knob), durEl),
-    h('div', 'vosd-hint', t('hint_vod')));
+    h('div', 'vosd-bar', timeEl, h('div', 'bar big', fill, knob), durEl));
   const status = h('div', 'video-status');
-  const el = h('div', 'screen vplayer', status, stateIcon, osd);
+  const subs = h('div', 'subtitle');
+  const el = h('div', 'screen vplayer', status, subs, stateIcon, osd);
 
-  function url(): string {
-    if (!session.provider) return '';
-    return episode ? session.provider.episodeUrl(episode) : session.provider.movieUrl(media);
+  function url(): Promise<string> {
+    if (catchup) return Promise.resolve(catchup.url);
+    if (!session.provider) return Promise.resolve('');
+    return episode ? session.provider.episodeUrl(episode, media) : session.provider.movieUrl(media);
   }
 
   function setTitles() {
+    if (catchup) {
+      titleEl.textContent = catchup.prog.title || catchup.ch.name;
+      subEl.textContent = `⟲ ${catchup.ch.name} · ${hhmm(catchup.prog.start)} – ${hhmm(catchup.prog.end)}`;
+      return;
+    }
     titleEl.textContent = media.name;
     subEl.textContent = episode ? `${t('season_n', episode.season)} · ${t('episode_n', episode.episode)} — ${episode.title}` : media.year || '';
   }
@@ -60,16 +69,37 @@ export function vodPlayerScreen(req: PlayRequest): Screen {
     durEl.textContent = d > 0 ? duration(d) : '--:--';
   }
 
-  function save() {
-    const d = player.duration();
-    const pos = player.time();
-    if (d > 0 && pos > 5) store.saveProgress(session.pid, media, episode, pos, d);
+  function markDone(done: boolean) {
+    if (!done) return;
+    session.setWatched(episode ? `ep:${episode.id}` : `movie:${media.id}`);
   }
 
-  function start(at: number) {
+  // Yetişkin içeriğin izleme konumu tutulmaz ("İzlemeye devam et"e girmez)
+  const adult = session.isAdult(media.kind, media);
+
+  function save() {
+    if (catchup || adult) return;
+    const d = player.duration();
+    const pos = player.time();
+    if (d > 0 && pos > 5) markDone(store.saveProgress(session.pid, media, episode, pos, d));
+  }
+
+  async function start(at: number) {
+    const my = ++startToken;
     setTitles();
-    player.play(url(), FULL, at);
+    resetSubtitles();
+    subs.textContent = '';
     showOsd();
+    if (!catchup) session.addHistory(media.kind, media);
+    let u = '';
+    try {
+      u = await url();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+    if (my !== startToken) return;
+    if (!u) { onState('error'); return; }
+    player.play(u, FULL, at);
   }
 
   function nextEpisode(): Episode | undefined {
@@ -89,7 +119,7 @@ export function vodPlayerScreen(req: PlayRequest): Screen {
     if (s === 'ended') {
       // Bitti olarak kaydet
       const d = player.duration();
-      store.saveProgress(session.pid, media, episode, d, d);
+      if (!catchup && !adult) markDone(store.saveProgress(session.pid, media, episode, d, d));
       const next = nextEpisode();
       if (next) {
         toast(`${t('next_episode')}: ${t('episode_n', next.episode)}`);
@@ -120,6 +150,7 @@ export function vodPlayerScreen(req: PlayRequest): Screen {
     el,
     onShow() {
       unsub = player.onState(onState);
+      player.onSubtitle((text) => { subs.textContent = text; });
       tickTimer = window.setInterval(tick, 1000);
       saveTimer = window.setInterval(save, 15000);
       start(req.startAt || 0);
@@ -131,6 +162,8 @@ export function vodPlayerScreen(req: PlayRequest): Screen {
       clearTimeout(seekTimer);
       clearTimeout(osdTimer);
       if (unsub) unsub();
+      player.onSubtitle(null);
+      startToken++;
       player.stop();
     },
     onKey(key: Key): boolean {
@@ -147,6 +180,7 @@ export function vodPlayerScreen(req: PlayRequest): Screen {
           if (osd.classList.contains('show')) osd.classList.remove('show');
           else showOsd();
           return true;
+        case 'yellow': case 'blue': case 'okhold': playerMenu(); return true;
         case 'stop': case 'back': back(); return true;
       }
       return true;

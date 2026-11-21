@@ -62,6 +62,7 @@ export function detailScreen(media: Media): Screen {
     if (info && info.duration) parts.push(info.duration);
     if (info && info.genre) parts.push(info.genre);
     if (media.kind === 'series' && seasons.length) parts.push(t('seasons_n', seasons.length));
+    if (media.kind === 'movie' && session.isWatched(`movie:${media.id}`)) parts.push(`✓ ${t('watched')}`);
     meta.appendChild(h('span', '', parts.join('  ·  ')));
     plot.textContent = (info && info.plot) || media.plot || (loaded ? t('no_plot') : '');
     credits.innerHTML = '';
@@ -99,6 +100,12 @@ export function detailScreen(media: Media): Screen {
       const firstEp = seasons[0].episodes[0];
       if (firstEp) btn(ep ? t('restart') : t('play'), !ep, () => playEpisode(firstEp, 0));
     }
+    const fav = session.isFavorite(media.kind, media.id);
+    btn(fav ? `★  ${t('fav_remove')}` : `☆  ${t('fav_add')}`, false, () => {
+      toast(session.toggleFavorite(media.kind, media) ? t('fav_added') : t('fav_removed'));
+      makeButtons();
+      paint();
+    });
     btnRow.innerHTML = '';
     buttons.forEach((b) => btnRow.appendChild(b.el));
     btnIdx = Math.min(btnIdx, Math.max(0, buttons.length - 1));
@@ -116,11 +123,12 @@ export function detailScreen(media: Media): Screen {
     if (!s) return;
     s.episodes.forEach((e) => {
       const pos = store.episodePos(session.pid, e.id);
-      epInner.appendChild(h('div', 'ecard',
+      const seen = session.isWatched(`ep:${e.id}`);
+      epInner.appendChild(h('div', `ecard${seen ? ' seen' : ''}`,
         poster(e.image || media.backdrop || media.poster, e.title, 'ecard-img'),
         h('div', 'ecard-num', t('episode_n', e.episode)),
         h('div', 'ecard-title', e.title),
-        pos > 0 ? h('div', 'ecard-resume', `▶ ${duration(pos)}`) : null));
+        pos > 0 ? h('div', 'ecard-resume', `▶ ${duration(pos)}`) : seen ? h('div', 'ecard-resume seen', `✓ ${t('watched')}`) : null));
     });
     epIdx = Math.min(epIdx, Math.max(0, s.episodes.length - 1));
   }
@@ -185,6 +193,7 @@ export function detailScreen(media: Media): Screen {
       if (!loaded) load();
       else {
         // Oynatıcıdan dönünce "Devam et" ve bölüm işaretleri güncellensin
+        fillMeta();
         makeButtons();
         fillEpisodes();
         paint();

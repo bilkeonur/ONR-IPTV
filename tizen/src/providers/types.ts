@@ -12,6 +12,11 @@ export interface Channel {
   /** M3U kaynaklarında doğrudan yayın adresi */
   url?: string;
   epgId?: string;
+  /** Geçmiş yayın (catch-up) arşivi var mı */
+  archive?: boolean;
+  /** Stalker: create_link için komut */
+  cmd?: string;
+  added?: number;
 }
 
 /** Film ya da dizi. */
@@ -28,6 +33,9 @@ export interface Media {
   added?: number;
   plot?: string;
   backdrop?: string;
+  /** Stalker: create_link için komut ve portalın verdiği ayrıntılar */
+  cmd?: string;
+  extra?: Partial<MediaInfo>;
   /** M3U dizilerinde bölümler önceden bilinir */
   episodes?: Episode[];
 }
@@ -42,6 +50,8 @@ export interface Episode {
   plot?: string;
   duration?: string;
   image?: string;
+  /** Stalker */
+  cmd?: string;
 }
 
 export interface MediaInfo {
@@ -66,32 +76,50 @@ export interface Program {
   desc: string;
   start: number; // epoch saniye
   end: number;
+  /** Sunucunun verdiği yerel başlangıç ("2024-05-01 20:00:00"), catch-up adresi için */
+  startStr?: string;
+  /** Bu program için arşiv var */
+  archive?: boolean;
 }
 
 export interface AccountInfo {
   status: string;
-  expires: string; // epoch saniye ya da boş (sınırsız)
+  expires: string; // epoch saniye, tarih metni ya da boş (sınırsız)
   maxConnections: string;
   activeConnections: string;
 }
 
 export type Section = 'movie' | 'series';
+export type AnySection = 'live' | Section;
+
+export interface Page<T> {
+  items: T[];
+  pages: number;
+}
 
 export interface Provider {
-  readonly kind: 'xtream' | 'm3u';
+  readonly kind: 'xtream' | 'm3u' | 'stalker';
+  /** Sayfa sayfa yüklenen bölümler (Stalker filmleri/dizileri) */
+  readonly paged: Section[];
   authenticate(): Promise<AccountInfo | null>;
   liveCategories(): Promise<Category[]>;
   liveChannels(): Promise<Channel[]>;
-  streamUrl(ch: Channel): string;
+  streamUrl(ch: Channel): Promise<string>;
   shortEpg(ch: Channel): Promise<Program[]>;
+  /** Geniş yayın akışı (dünden yarına) */
+  epgTable(ch: Channel): Promise<Program[]>;
+  /** Geçmiş yayın adresi; yoksa '' */
+  catchupUrl(ch: Channel, p: Program): string;
 
   mediaCategories(section: Section): Promise<Category[]>;
   /** categoryId boşsa tüm içerik */
   mediaItems(section: Section, categoryId: string): Promise<Media[]>;
+  /** Sayfalı bölümlerde tek sayfa (1'den başlar) */
+  mediaPage?(section: Section, categoryId: string, page: number): Promise<Page<Media>>;
   mediaInfo(m: Media): Promise<MediaInfo | null>;
   seasons(m: Media): Promise<{ info: MediaInfo | null; seasons: Season[] }>;
-  movieUrl(m: Media): string;
-  episodeUrl(e: Episode): string;
+  movieUrl(m: Media): Promise<string>;
+  episodeUrl(e: Episode, m: Media): Promise<string>;
 }
 
 export class ProviderError extends Error {}

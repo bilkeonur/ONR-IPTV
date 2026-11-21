@@ -1,15 +1,24 @@
 // Ekranlar arası geçiş (döngüsel import olmasın diye kayıtla).
 import { Screen, pop, push, reset } from './app';
-import { Episode, Media } from './providers/types';
+import { AnySection, Channel, Episode, Media, Program } from './providers/types';
+import { Profile } from './store';
 
 export interface Routes {
-  login: void;
+  /** Profil ekleme/düzenleme; ilk kurulumda argümansız */
+  login: { profile?: Profile; cancelable?: boolean } | void;
   home: void;
-  live: void;
+  /** Belirli bir kanalı açmak için kimliği */
+  live: { channelId?: string } | void;
   settings: void;
+  profiles: void;
   vod: 'movie' | 'series';
   detail: Media;
   play: PlayRequest;
+  /** Arama; scope verilirse yalnızca o bölümde. onChannel: kanal seçilince (arama kapanır) */
+  search: { scope?: AnySection; onChannel?: (ch: Channel) => void } | void;
+  /** onPlay: şu anki programa OK basılınca (rehber kapanır, kanal açılır) */
+  guide: { channels: Channel[]; label: string; onPlay?: (ch: Channel) => void; onCatchup?: (ch: Channel, p: Program) => void };
+  catpicker: { section: AnySection; mode: 'hide' | 'lock' };
 }
 
 export interface PlayRequest {
@@ -18,6 +27,8 @@ export interface PlayRequest {
   /** Dizi bölümlerinde sıradaki bölüme geçmek için tüm liste */
   playlist?: Episode[];
   startAt?: number;
+  /** Geçmiş yayın (catch-up): media yalnızca başlık için kullanılır */
+  catchup?: { ch: Channel; prog: Program; url: string };
 }
 
 type Factory<K extends keyof Routes> = (arg: Routes[K]) => Screen;

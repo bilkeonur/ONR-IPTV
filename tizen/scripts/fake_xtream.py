@@ -8,6 +8,7 @@ için de bu tür bir demo hesabı gerekir.
 """
 import base64
 import json
+import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -33,6 +34,11 @@ NAMES = {
 }
 COLORS = ["#e5484d", "#30a46c", "#3e63dd", "#f76b15", "#8e4ec6", "#12a594", "#d6409f", "#ffc53d"]
 
+# FAKE_ADULT=1: yetişkin içerik filtresini denemek için bir "Adult +18" kategori ekler
+if os.environ.get("FAKE_ADULT") == "1":
+    CATEGORIES.insert(0, ("9", "Adult +18"))
+    NAMES["9"] = ["Gece Kanalı", "Kırmızı TV"]
+
 CHANNELS = []
 _n = 1
 for cid, _ in CATEGORIES:
@@ -57,6 +63,10 @@ for i in range(60):
     cid = VOD_CATS[i % len(VOD_CATS)][0]
     MOVIES.append({"id": 5000 + i, "name": f"{W1[i % 12]} {W2[(i * 5) % 12]}", "cid": cid,
                    "year": 1995 + (i * 7) % 30, "rating": round(5 + (i * 37 % 50) / 10, 1)})
+if os.environ.get("FAKE_ADULT") == "1":
+    VOD_CATS.insert(0, ("19", "XXX Adult"))
+    for i in range(3):
+        MOVIES.append({"id": 5900 + i, "name": f"Gece Şehir Özel {i + 1}", "cid": "19", "year": 2020, "rating": 5.0})
 SERIES = []
 for i in range(24):
     cid = SER_CATS[i % len(SER_CATS)][0]
@@ -87,16 +97,21 @@ def logo_svg(ch):
             f'text-anchor="middle">{initials}</text></svg>').encode()
 
 
-def epg(stream_id, limit):
+def archived(sid):
+    """Bazı kanalların geçmiş yayın arşivi var (catch-up testi için)."""
+    return int(sid) % 4 == 1
+
+
+def epg(stream_id, limit, past_hours=0):
     """Her kanal için 30-90 dakikalık, kanala göre kaydırılmış uydurma programlar."""
     sid = int(stream_id)
     now = int(time.time())
     slot = 1800 * (1 + sid % 3)
-    start = now - (now % slot) - slot
+    start = now - (now % slot) - slot - past_hours * 3600
     out = []
-    for i in range(limit + 1):
+    for i in range(limit + 1 + past_hours * 3600 // slot):
         s = start + i * slot
-        if s + slot < now:
+        if s + slot < now - past_hours * 3600:
             continue
         title = PROGRAMS[(sid + s // slot) % len(PROGRAMS)]
         desc = f"{title} — demo açıklaması. Bu program test sunucusu tarafından üretildi."
@@ -107,8 +122,80 @@ def epg(stream_id, limit):
             "start": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(s)),
             "end": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(s + slot)),
             "start_timestamp": str(s), "stop_timestamp": str(s + slot),
+            "has_archive": 1 if archived(sid) and s + slot < now else 0,
         })
-    return out[:limit]
+    return out[:limit + past_hours * 3600 // slot]
+
+
+def xmltv(base):
+    """Kanalların yayın akışı XMLTV biçiminde (M3U + url-tvg testi için)."""
+    def fmt(ts):
+        return time.strftime("%Y%m%d%H%M%S +0000", time.gmtime(ts))
+    parts = ['<?xml version="1.0" encoding="UTF-8"?><tv>']
+    for c in CHANNELS:
+        parts.append(f'<channel id="ch{c["stream_id"]}"><display-name>{c["name"]}</display-name></channel>')
+    for c in CHANNELS:
+        for p in epg(c["stream_id"], 30, past_hours=3):
+            t = base64.b64decode(p["title"]).decode()
+            d = base64.b64decode(p["description"]).decode()
+            parts.append(f'<programme start="{fmt(int(p["start_timestamp"]))}" stop="{fmt(int(p["stop_timestamp"]))}" '
+                         f'channel="ch{c["stream_id"]}"><title lang="tr">{t}</title><desc>{d} &amp; daha fazlası</desc></programme>')
+    parts.append("</tv>")
+    return "".join(parts).encode()
+
+
+# ---- Sahte Stalker portalı (MAC çerezi ve Bearer anahtarı ister)
+STALKER_TOKEN = "demo-token-123"
+
+
+def stalker(handler, q, base):
+    cookie = handler.headers.get("Cookie", "")
+    if "mac=00%3A1A%3A79" not in cookie and "mac=00:1A:79" not in cookie:
+        return handler.send(200, b'{"js":null,"text":"Authorization failed (no mac)"}')
+    typ, action = q.get("type", ""), q.get("action", "")
+    if action == "handshake":
+        return handler.json({"js": {"token": STALKER_TOKEN}})
+    if handler.headers.get("Authorization", "") != f"Bearer {STALKER_TOKEN}":
+        return handler.send(200, b'{"js":null,"text":"Authorization failed."}')
+    js = None
+    if action == "get_profile":
+        js = {"status": 0}
+    elif typ == "account_info":
+        js = {"end_date": "2027-12-31"}
+    elif typ == "itv" and action == "get_genres":
+        js = [{"id": "*", "title": "All"}] + [{"id": i, "title": n} for i, n in CATEGORIES]
+    elif typ == "itv" and action == "get_all_channels":
+        js = {"data": [{"id": str(c["stream_id"]), "name": c["name"], "number": str(c["num"]),
+                        "logo": f"{base}/logo/{c['stream_id']}.svg", "tv_genre_id": c["category_id"],
+                        "cmd": f"ffmpeg http://localhost/ch/{c['stream_id']}", "tv_archive": 0} for c in CHANNELS]}
+    elif typ == "itv" and action == "create_link":
+        sid = q.get("cmd", "").rsplit("/", 1)[-1]
+        js = {"cmd": f"ffmpeg {base}/live/{USER}/{PASS}/{sid}.ts"}
+    elif typ == "itv" and action == "get_short_epg":
+        js = [{"name": base64.b64decode(p["title"]).decode(), "descr": base64.b64decode(p["description"]).decode(),
+               "start_timestamp": p["start_timestamp"], "stop_timestamp": p["stop_timestamp"]}
+              for p in epg(q.get("ch_id", "0"), int(q.get("size", "4")))]
+    elif typ in ("vod", "series") and action == "get_categories":
+        js = [{"id": "*", "title": "All"}] + [{"id": i, "title": n} for i, n in (VOD_CATS if typ == "vod" else SER_CATS)]
+    elif typ in ("vod", "series") and action == "get_ordered_list" and q.get("movie_id"):
+        x = next((y for y in SERIES if str(y["id"]) == q["movie_id"]), None)
+        js = {"data": [{"id": f"{x['id']}{sn}", "name": f"Sezon {sn}", "season_number": sn, "series": list(range(1, 9)),
+                        "cmd": f"http://localhost/ser/{x['id']}"} for sn in range(1, x["seasons"] + 1)] if x else []}
+    elif typ in ("vod", "series") and action == "get_ordered_list":
+        src = MOVIES if typ == "vod" else SERIES
+        cat = q.get("category", "*")
+        items = [m for m in src if cat in ("*", "") or m["cid"] == cat]
+        page = int(q.get("p", "1"))
+        chunk = items[(page - 1) * 14:page * 14]
+        js = {"total_items": len(items), "max_page_items": 14, "data": [{
+            "id": str(m["id"]), "name": m["name"], "year": str(m["year"]), "rating_imdb": str(m["rating"]),
+            "screenshot_uri": f"{base}/poster/{m['id']}.svg", "description": PLOT, "genres_str": "Demo",
+            "actors": "Demo Oyuncu", "director": "Demo Yönetmen", "time": "102", "added": "2024-01-01 10:00:00",
+            "is_series": "1" if typ == "series" else "0", "cmd": f"http://localhost/mov/{m['id']}"} for m in chunk]}
+    elif typ == "vod" and action == "create_link":
+        mid = q.get("cmd", "").rsplit("/", 1)[-1]
+        js = {"cmd": f"ffmpeg {base}/movie/{USER}/{PASS}/{mid}.mp4"}
+    return handler.json({"js": js})
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -154,10 +241,22 @@ class Handler(BaseHTTPRequestHandler):
             sid = int(parts[3].split(".")[0])
             return self.send(302, headers={"Location": VIDEOS[sid % len(VIDEOS)]})
 
+        if u.path in ("/portal.php", "/stalker_portal/server/load.php"):
+            return stalker(self, q, base)
+
+        if u.path == "/xmltv.xml":
+            return self.send(200, xmltv(base), "application/xml")
+
+        if parts and parts[0] == "timeshift" and len(parts) == 6:
+            if parts[1] != USER or parts[2] != PASS:
+                return self.send(401)
+            sid = int(parts[5].split(".")[0])
+            return self.send(302, headers={"Location": VIDEOS[(sid + 1) % len(VIDEOS)]})
+
         if u.path == "/get.php":
             if q.get("username") != USER or q.get("password") != PASS:
                 return self.send(401)
-            lines = ["#EXTM3U"]
+            lines = [f'#EXTM3U url-tvg="{base}/xmltv.xml"']
             cats = dict(CATEGORIES)
             for c in CHANNELS:
                 lines.append(f'#EXTINF:-1 tvg-id="ch{c["stream_id"]}" tvg-name="{c["name"]}" '
@@ -185,11 +284,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.json([{
                 "num": c["num"], "name": c["name"], "stream_type": "live", "stream_id": c["stream_id"],
                 "stream_icon": f"{base}/logo/{c['stream_id']}.svg", "epg_channel_id": f"ch{c['stream_id']}",
-                "added": "1700000000", "category_id": c["category_id"], "tv_archive": 0,
+                "added": str(1700000000 + c["num"] * 3600), "category_id": c["category_id"],
+                "tv_archive": 1 if archived(c["stream_id"]) else 0, "tv_archive_duration": 3 if archived(c["stream_id"]) else 0,
             } for c in CHANNELS if not cid or c["category_id"] == cid])
         if action == "get_short_epg":
             time.sleep(0.2)
             return self.json({"epg_listings": epg(q.get("stream_id", "0"), int(q.get("limit", "4")))})
+        if action == "get_simple_data_table":
+            return self.json({"epg_listings": epg(q.get("stream_id", "0"), 40, past_hours=6)})
         if action == "get_vod_categories":
             return self.json([{"category_id": i, "category_name": n, "parent_id": 0} for i, n in VOD_CATS])
         if action == "get_series_categories":

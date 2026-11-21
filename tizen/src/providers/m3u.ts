@@ -34,6 +34,14 @@ function classify(url: string, group: string): Entry['section'] {
   return 'live';
 }
 
+/** #EXTM3U satırındaki url-tvg / x-tvg-url rehber adresi */
+export function headerEpgUrl(text: string): string {
+  const first = text.slice(0, 2000).split(/\r?\n/).find((l) => l.trim().startsWith('#EXTM3U'));
+  if (!first) return '';
+  const a = attrs(first);
+  return (a['url-tvg'] || a['x-tvg-url'] || '').split(',')[0].trim();
+}
+
 export function parseM3u(text: string, otherGroup: string): Entry[] {
   const out: Entry[] = [];
   let info: { name: string; attrs: Record<string, string> } | null = null;
@@ -74,14 +82,73 @@ const extOf = (url: string): string => {
   return m ? m[1] : 'mp4';
 };
 
+// ---- XMLTV rehberi
+const unxml = (s: string): string => s
+  .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(parseInt(n, 10)))
+  .replace(/&amp;/g, '&').trim();
+
+/** "20240501200000 +0300" → epoch saniye */
+export function xmltvTime(s: string): number {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?/.exec((s || '').trim());
+  if (!m) return 0;
+  let t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) / 1000;
+  if (m[7]) {
+    const sign = m[7][0] === '+' ? 1 : -1;
+    t -= sign * (parseInt(m[7].slice(1, 3), 10) * 3600 + parseInt(m[7].slice(3, 5), 10) * 60);
+  }
+  return t;
+}
+
+/** Kanal kimliği (ve küçük harfli adı) → programlar. Yalnızca yakın zamandakiler tutulur. */
+export function parseXmltv(text: string): Record<string, Program[]> {
+  const now = Date.now() / 1000;
+  const lo = now - 6 * 3600;
+  const hi = now + 36 * 3600;
+  const names: Record<string, string> = {};
+  const progs: Record<string, Program[]> = {};
+  const chRe = /<channel\s+id="([^"]*)"[^>]*>([\s\S]*?)<\/channel>/g;
+  let m: RegExpExecArray | null;
+  while ((m = chRe.exec(text))) {
+    const dn = /<display-name[^>]*>([\s\S]*?)<\/display-name>/.exec(m[2]);
+    if (dn) names[unxml(dn[1]).toLowerCase()] = m[1];
+  }
+  const pRe = /<programme\s([^>]*)>([\s\S]*?)<\/programme>/g;
+  while ((m = pRe.exec(text))) {
+    const a = attrs(m[1]);
+    const start = xmltvTime(a.start);
+    const end = xmltvTime(a.stop);
+    if (!(end > lo && start < hi)) continue;
+    const title = /<title[^>]*>([\s\S]*?)<\/title>/.exec(m[2]);
+    const desc = /<desc[^>]*>([\s\S]*?)<\/desc>/.exec(m[2]);
+    const ch = a.channel || '';
+    (progs[ch] = progs[ch] || []).push({ title: title ? unxml(title[1]) : '', desc: desc ? unxml(desc[1]) : '', start, end });
+  }
+  const out: Record<string, Program[]> = {};
+  Object.keys(progs).forEach((id) => {
+    const list = progs[id].sort((x, y) => x.start - y.start);
+    out[id] = list;
+    out[id.toLowerCase()] = list;
+  });
+  Object.keys(names).forEach((nm) => {
+    if (progs[names[nm]] && !out[nm]) out[nm] = progs[names[nm]];
+  });
+  return out;
+}
+
 export class M3uProvider implements Provider {
   readonly kind = 'm3u' as const;
+  readonly paged: Section[] = [];
   private entries: Entry[] | null = null;
   private url: string;
   private seriesCache: Media[] | null = null;
+  private epgUrl: string;
+  private epg: Promise<Record<string, Program[]>> | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, epgUrl = '') {
     this.url = normalizeUrl(url);
+    this.epgUrl = epgUrl.trim();
   }
 
   private async load(): Promise<Entry[]> {
@@ -98,6 +165,7 @@ export class M3uProvider implements Provider {
     text = text.replace(/^﻿/, '');
     if (text.indexOf('#EXTINF') < 0 && text.indexOf('#EXTM3U') < 0) throw new ProviderError(t('err_not_m3u'));
     this.entries = parseM3u(text, t('cat_other'));
+    if (!this.epgUrl) this.epgUrl = headerEpgUrl(text);
     return this.entries;
   }
 
@@ -131,16 +199,44 @@ export class M3uProvider implements Provider {
       logo: e.attrs['tvg-logo'] || '',
       categoryId: e.group,
       url: e.url,
-      epgId: e.attrs['tvg-id'] || '',
+      epgId: e.attrs['tvg-id'] || e.attrs['tvg-name'] || e.name,
+      archive: !!(e.attrs.catchup || e.attrs.timeshift),
     }));
   }
 
-  streamUrl(ch: Channel): string {
+  async streamUrl(ch: Channel): Promise<string> {
     return ch.url || '';
   }
 
-  async shortEpg(): Promise<Program[]> {
-    return []; // XMLTV desteği sonraki adımda
+  private loadEpg(): Promise<Record<string, Program[]>> {
+    if (!this.epg) {
+      this.epg = this.epgUrl
+        ? getText(normalizeUrl(this.epgUrl), 180000).then(parseXmltv).catch(() => ({}))
+        : Promise.resolve({});
+    }
+    return this.epg;
+  }
+
+  private async programs(ch: Channel): Promise<Program[]> {
+    await this.load();
+    if (!this.epgUrl) return [];
+    const epg = await this.loadEpg();
+    const id = ch.epgId || '';
+    return epg[id] || epg[id.toLowerCase()] || epg[ch.name.toLowerCase()] || [];
+  }
+
+  async shortEpg(ch: Channel): Promise<Program[]> {
+    const now = Date.now() / 1000;
+    return (await this.programs(ch)).filter((p) => p.end > now).slice(0, 4);
+  }
+
+  async epgTable(ch: Channel): Promise<Program[]> {
+    const now = Date.now() / 1000;
+    return (await this.programs(ch)).filter((p) => p.end > now - 3 * 3600 && p.start < now + 86400);
+  }
+
+  catchupUrl(): string {
+    return '';
   }
 
   mediaCategories(section: Section): Promise<Category[]> {
@@ -204,11 +300,11 @@ export class M3uProvider implements Provider {
     return { info: null, seasons };
   }
 
-  movieUrl(m: Media): string {
+  async movieUrl(m: Media): Promise<string> {
     return m.url || '';
   }
 
-  episodeUrl(e: Episode): string {
+  async episodeUrl(e: Episode): Promise<string> {
     return e.url || '';
   }
 }

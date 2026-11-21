@@ -38,6 +38,13 @@ export class VGrid<T> {
     this.select(Math.max(0, Math.min(index, items.length - 1)), true);
   }
 
+  /** Görünen hücreleri yeniden çizer (ör. favori işareti değişince). */
+  redraw(): void {
+    this.cells.forEach((c) => c.remove());
+    this.cells.clear();
+    this.draw();
+  }
+
   setActive(on: boolean): void {
     this.el.classList.toggle('active', on);
   }

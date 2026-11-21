@@ -3,6 +3,8 @@ import { Key, keyOf } from './platform';
 
 export interface Screen {
   el: HTMLElement;
+  /** Alttaki ekranın üstünde açılan pencere (menü, PIN): alttaki ekran gizlenmez, durmaz. */
+  overlay?: boolean;
   /** true dönerse tuş işlenmiş sayılır. */
   onKey(key: Key): boolean;
   /** Tuş bırakıldığında (basılı tutma algısı için). */
@@ -27,6 +29,8 @@ function hideTop() {
   if (t) {
     if (t.onHide) t.onHide();
     t.el.remove();
+    // Üst katman kapanırken altındaki (hep görünür kalmış) ekranlar etkilenmez;
+    // normal bir ekran gizlenirken altındaki üst katmanlar zaten yığının üstünde değildir.
   }
 }
 
@@ -40,7 +44,7 @@ function showTop() {
 
 /** Yeni ekranı öne getirir; Geri ile öncekine dönülür. */
 export function push(screen: Screen): void {
-  hideTop();
+  if (!screen.overlay) hideTop();
   stack.push(screen);
   showTop();
 }
@@ -48,21 +52,35 @@ export function push(screen: Screen): void {
 /** Üstteki ekranı kapatır ve bir öncekine döner. */
 export function pop(): void {
   if (stack.length <= 1) return;
+  const s = stack[stack.length - 1];
   hideTop();
-  const s = stack.pop();
-  if (s && s.onDestroy) s.onDestroy();
-  showTop();
+  stack.pop();
+  if (s.onDestroy) s.onDestroy();
+  if (!s.overlay) showTop();
+}
+
+/** Belirli bir üst katmanı kapatır (zaten kapandıysa bir şey yapmaz). */
+export function close(screen: Screen): void {
+  if (top() === screen) pop();
 }
 
 /** Yığını temizleyip tek ekranla başlar (giriş, çıkış). */
 export function reset(screen: Screen): void {
-  hideTop();
   while (stack.length) {
-    const s = stack.pop();
-    if (s && s.onDestroy) s.onDestroy();
+    const s = stack.pop() as Screen;
+    if (s.el.parentNode) {
+      if (s.onHide) s.onHide();
+      s.el.remove();
+    }
+    if (s.onDestroy) s.onDestroy();
   }
   stack.push(screen);
   showTop();
+}
+
+/** Şu an öndeki ekran (geç gelen yanıtlar yanlış ekranda pencere açmasın diye). */
+export function topScreen(): Screen | undefined {
+  return top();
 }
 
 export function depth(): number {
@@ -89,20 +107,55 @@ export function isEditing(): boolean {
   return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA');
 }
 
+/** OK'a bu süreden uzun basılırsa 'okhold' (seçenekler menüsü) gönderilir. */
+const HOLD_MS = 700;
+
 export function initKeys(): void {
+  // OK tuşu bırakılınca 'ok', basılı tutulunca bir kez 'okhold' olarak dağıtılır.
+  // Basılıyken gelen tekrarlar yok sayılır (açılan menü kendiliğinden seçim yapmasın).
+  let okDown = false;
+  let okTimer = 0;
+  let okFired = false;
+  const dispatch = (key: Key, e?: Event) => {
+    const t = top();
+    if (t && t.onKey(key) && e) e.preventDefault();
+  };
+
   document.addEventListener('keydown', (e) => {
     const editing = isEditing();
     const key = keyOf(e, editing);
     if (!key) return;
     // Yazı alanındayken yalnızca OK/Bitti/İptal/yukarı/aşağı bizim
     if (editing && ['ok', 'done', 'cancel', 'up', 'down', 'back'].indexOf(key) < 0) return;
-    const t = top();
-    if (t && t.onKey(key)) e.preventDefault();
+    if (key === 'ok' && !editing) {
+      e.preventDefault();
+      if (okDown) return;
+      okDown = true;
+      okFired = false;
+      okTimer = window.setTimeout(() => {
+        okFired = true;
+        dispatch('okhold');
+      }, HOLD_MS);
+      return;
+    }
+    dispatch(key, e);
   });
   document.addEventListener('keyup', (e) => {
     const key = keyOf(e, isEditing());
+    if (key === 'ok' && okDown) {
+      okDown = false;
+      clearTimeout(okTimer);
+      e.preventDefault();
+      if (!okFired) dispatch('ok');
+      return;
+    }
     const t = top();
     if (key && t && t.onKeyUp) t.onKeyUp(key);
+  });
+  // Uygulama arka plana geçerse yarım kalan basış unutulsun
+  window.addEventListener('blur', () => {
+    okDown = false;
+    clearTimeout(okTimer);
   });
 }
 
